@@ -11,7 +11,7 @@ Please follow instructions [here](https://docs.astral.sh/uv/getting-started/inst
 ### 2. Setup environment
 
 Create a `.env` file in the root directory with the following env vars.
-Please obtain the customer name service account credentials file from your Octogen Account rep.
+Please obtain the customer name and service account credentials file from your Octogen Account rep.
 
 ```
 OCTOGEN_CATALOG_BUCKET_NAME=octogen-catalog-exchange
