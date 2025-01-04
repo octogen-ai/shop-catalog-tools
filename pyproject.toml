@@ -1,0 +1,24 @@
+[project]
+name = "shop-catalog-tools"
+version = "0.1.0"
+description = "Tools to download and work with the Octogen shopping catalogs"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncer>=0.0.8",
+    "google-cloud-storage>=2.19.0",
+    "python-dotenv>=1.0.1",
+]
+
+[dependency-groups]
+dev = ["mypy>=1.14.1", "ruff>=0.8.5"]
+
+[tool.mypy]
+disallow_untyped_defs = true
+show_error_codes = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+[[tool.mypy.overrides]]
+module = ["asyncpg.*", "google.cloud.*"]
+ignore_missing_imports = true
