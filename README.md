@@ -26,3 +26,40 @@ Run the following command to download a catalog.
 ```
 uv run src/octogen_catalog.py --catalog <catalog-name> --download <download-path>
 ```
+eg:
+```
+uv run src/octogen_catalog.py --catalog anntaylor --download /tmp/octogen-catalog-exchange
+```
+Now the catalog files will be downloaded to `/tmp/octogen-catalog-exchange/<OCTOGEN_CUSTOMER_NAME>/catalog=<catalog-name>/`: 
+```
+ls /tmp/octogen-catalog-exchange/velou/catalog=anntaylor/
+```
+
+### 4. Extract the data to a database
+
+I had the AI generate a script to load the data to a SQLite database:
+```
+uv run src/load_to_db.py --catalog anntaylor --download /tmp/octogen-catalog-exchange
+```
+
+### 5. Query the data
+I used https://sqlitebrowser.org/, which I installed via `brew install sqlitebrowser`.
+
+```
+brew install sqlitebrowser
+```
+Open the application and select the database file `anntaylor_catalog.db`. 
+
+The datastructure for each product is simple: a `product_url`, `id`, `name` and `extracted_product` json column/field that has all of the
+attributes. 
+
+The schema for `extracted_product` is in `src/schema.py` and a json version of it is in `src/schema.json`.
+
+### 6. Alternative query: read structured products 
+
+We've also included a script to read the structured products into a pandas dataframe and print them out in tabular format:
+```
+uv run src/read_structured_products.py --catalog anntaylor --db_path anntaylor_catalog.db
+```
+
+
