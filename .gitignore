@@ -171,3 +171,4 @@ cython_debug/
 .pypirc
 *.db
 google_credentials.json
+node_modules/
