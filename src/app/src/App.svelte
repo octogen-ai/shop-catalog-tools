@@ -38,10 +38,6 @@
         loading = false;
     }
 
-    onMount(() => {
-        loadProducts();
-    });
-
     async function handlePageChange(event) {
         const newPage = event.detail;
         await loadProducts(newPage);
