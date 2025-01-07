@@ -14,6 +14,7 @@
     let totalProducts = 0;
     let perPage = 100;
     let pageSizeOptions = [100, 200, 300, 400];
+    let totalSearchResults = 0;
 
     async function loadProducts(page = 1) {
         loading = true;
@@ -43,7 +44,9 @@
       }
       searching = true;
       const res = await fetch(`/api/search?query=${encodeURIComponent(searchQuery)}`);
-      searchResults = await res.json();
+      const data = await res.json();
+      searchResults = data.products;
+      totalSearchResults = data.total;
       searching = false;
     }
   
@@ -81,7 +84,10 @@
   
       {#if searchQuery && searchResults.length > 0}
         <div class="mb-8">
-          <h2 class="text-2xl font-semibold mb-4">Search Results</h2>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-semibold">Search Results</h2>
+            <span class="text-gray-600">Found {totalSearchResults} products</span>
+          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {#each searchResults as product}
               <ProductCard 
@@ -96,7 +102,10 @@
         <p class="text-gray-600 mb-8">No results found for "{searchQuery}"</p>
       {/if}
   
-      <h2 class="text-2xl font-semibold mb-4">All Products</h2>
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-semibold">All Products</h2>
+        <span class="text-gray-600">Total: {totalProducts} products</span>
+      </div>
       {#if loading}
         <p class="text-gray-600">Loading products...</p>
       {:else}

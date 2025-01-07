@@ -55,10 +55,38 @@ async def get_products(page: int = 1, per_page: int = 12):
 
 @app.get("/api/search")
 async def search_products(query: str):
+    # Open Whoosh index
     ix = open_dir(INDEX_DIR)
     parser = QueryParser("description", schema=ix.schema)
-    query = parser.parse(query)
+    parsed_query = parser.parse(query)
 
+    # Get search results from Whoosh
     with ix.searcher() as searcher:
-        results = searcher.search(query)
-        return JSONResponse([dict(result) for result in results])
+        results = searcher.search(parsed_query)
+        # Extract product IDs from search results
+        product_ids = [result['id'] for result in results]
+
+    if not product_ids:
+        return JSONResponse({
+            "products": [],
+            "total": 0
+        })
+
+    # Get full product data from SQLite
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Create placeholders for SQL IN clause
+    placeholders = ','.join(['?' for _ in product_ids])
+    
+    cursor.execute(
+        f"SELECT extracted_product FROM anntaylor WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
+        product_ids
+    )
+    products = cursor.fetchall()
+    conn.close()
+
+    return JSONResponse({
+        "products": [json.loads(row['extracted_product']) for row in products],
+        "total": len(products)
+    })
