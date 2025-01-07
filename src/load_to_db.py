@@ -5,6 +5,7 @@ import os
 import sqlite3
 from typing import Any
 
+from dotenv import load_dotenv
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
     parquet_files = glob.glob(os.path.join(download_path, "**/*.parquet"), recursive=True)
     
     total_products = 0
+    duplicates_skipped = 0
     
     # Create table with first file
     if parquet_files:
@@ -33,29 +35,41 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
         first_df.to_sql(table_name, conn, if_exists="replace", index=False)
         total_products += len(first_df)
         logger.info(f"Created table {table_name} with schema from first file ({len(first_df)} products)")
+        
+        # Add unique constraint on productGroupID
+        cursor = conn.cursor()
+        cursor.execute(f"""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id 
+            ON {table_name} (json_extract(extracted_product, '$.productGroupID'))
+            WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
+        """)
+        conn.commit()
         parquet_files = parquet_files[1:]  # Remove first file from list
     
     # Append remaining files
     for parquet_file in parquet_files:
-        # Get the relative path without extension as table name
-        rel_path = os.path.relpath(parquet_file, download_path)
-        
         logger.info(f"Loading {parquet_file} into table {table_name}")
         
         try:
             # Read parquet file
             df = pd.read_parquet(parquet_file)
             
-            # Write to SQLite
+            # Write to SQLite, ignoring duplicates
             df.to_sql(table_name, conn, if_exists="append", index=False)
             total_products += len(df)
             logger.info(f"Successfully loaded {len(df)} rows into {table_name}")
             
+        except sqlite3.IntegrityError as e:
+            # Count this as a duplicate and continue
+            duplicates_skipped += 1
+            logger.warning(f"Skipped duplicate product group in {parquet_file}: {str(e)}")
         except Exception as e:
             logger.error(f"Error loading {parquet_file}: {str(e)}")
     
     conn.close()
-    logger.info(f"Finished loading all parquet files to SQLite database. Total products: {total_products}")
+    logger.info(f"Finished loading all parquet files to SQLite database.")
+    logger.info(f"Total products loaded: {total_products}")
+    logger.info(f"Duplicate products skipped: {duplicates_skipped}")
 
 
 def main() -> None:
@@ -78,8 +92,20 @@ def main() -> None:
     if not os.path.exists(args.download):
         logger.error(f"Download path {args.download} does not exist")
         return
-        
-    load_parquet_files_to_sqlite(args.download, args.catalog)
+    if not load_dotenv():
+        logger.error("Failed to load .env file")
+        logger.error(
+            "Please see README.md for more information on how to set up the .env file."
+        )
+        return
+    octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")    
+    if not octogen_customer_name:
+        logger.error("Please set OCTOGEN_CUSTOMER_NAME in the .env file.")
+        return
+    download_path: str = args.download
+    if octogen_customer_name not in args.download:
+        download_path: str = os.path.join(args.download, octogen_customer_name, f"catalog={args.catalog}")
+    load_parquet_files_to_sqlite(download_path, args.catalog)
 
 
 if __name__ == "__main__":
