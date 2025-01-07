@@ -15,7 +15,7 @@ logging.basicConfig(
 
 def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
     """Load all parquet files from the download path into a SQLite database."""
-    db_path = f"{catalog}_catalog.db"
+    db_path = os.path.join(os.path.dirname(__file__), "..", f"{catalog}_catalog.db")
     logger.info(f"Loading parquet files from {download_path} into {db_path}")
     
     # Connect to SQLite database
@@ -25,6 +25,14 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
     # Find all parquet files recursively
     parquet_files = glob.glob(os.path.join(download_path, "**/*.parquet"), recursive=True)
     
+    # Create table with first file
+    if parquet_files:
+        first_df = pd.read_parquet(parquet_files[0])
+        first_df.to_sql(table_name, conn, if_exists="replace", index=False)
+        logger.info(f"Created table {table_name} with schema from first file")
+        parquet_files = parquet_files[1:]  # Remove first file from list
+    
+    # Append remaining files
     for parquet_file in parquet_files:
         # Get the relative path without extension as table name
         rel_path = os.path.relpath(parquet_file, download_path)
@@ -36,7 +44,7 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
             df = pd.read_parquet(parquet_file)
             
             # Write to SQLite
-            df.to_sql(table_name, conn, if_exists="replace", index=False)
+            df.to_sql(table_name, conn, if_exists="append", index=False)
             logger.info(f"Successfully loaded {len(df)} rows into {table_name}")
             
         except Exception as e:
