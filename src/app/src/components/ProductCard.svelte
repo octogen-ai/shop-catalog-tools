@@ -77,7 +77,26 @@
       </div>
 
       <div class="p-4">
-        <h3 class="text-lg font-semibold mb-2">{product.name}</h3>
+        <div class="flex justify-between items-start mb-2">
+          <h3 class="text-lg font-semibold">{product.name}</h3>
+          <a
+            href={`/api/${product.catalog}/product/${product.id}/raw`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-gray-500 hover:text-gray-700"
+            title="View Raw JSON"
+          >
+          <div class="relative group">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+            <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
+              Raw product data
+            </div>
+          </div>
+          </a>
+          
+        </div>
         <p class="text-gray-600 mb-2">${product.price_info?.price}</p>
         {#if product.availability}
           {@const availInfo = getAvailabilityInfo(product.availability)}
@@ -95,6 +114,41 @@
 
     {#if expanded && product.hasVariant}
       <div class="border-t p-4">
+        {#if product.description}
+          <div class="mb-4">
+            <h4 class="text-lg font-semibold mb-2">Description</h4>
+            <p class="text-gray-600">{product.description}</p>
+          </div>
+        {/if}
+
+        {#if product.categories && product.categories.length > 0}
+          <div class="mb-4">
+            <h4 class="text-lg font-semibold mb-2">Categories</h4>
+            <nav class="flex flex-wrap gap-2">
+              {#each product.categories as category}
+                <a
+                  href={category.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {category.name}
+                  {#if category !== product.categories[product.categories.length - 1]}
+                    <span class="text-gray-400 mx-1">›</span>
+                  {/if}
+                </a>
+              {/each}
+            </nav>
+          </div>
+        {/if}
+
+        {#if product.materials && product.materials.length > 0}
+          <div class="mb-4">
+            <h4 class="text-lg font-semibold mb-2">Materials</h4>
+            <p class="text-gray-600">{product.materials.join(', ')}</p>
+          </div>
+        {/if}
+
         <h4 class="text-lg font-semibold mb-4">Available Variants</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {#each product.hasVariant as variant}

@@ -92,3 +92,20 @@ async def search_products(table_name: str, query: str):
         "products": [json.loads(row['extracted_product']) for row in products],
         "total": len(products)
     })
+
+@app.get("/api/{table}/product/{product_id}/raw")
+async def get_raw_product(table: str, product_id: str):
+    conn = sqlite3.connect(f"{table}_catalog.db")
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        f"SELECT extracted_product FROM {table} WHERE id = ?",
+        (product_id,)
+    )
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    return json.loads(result[0])
