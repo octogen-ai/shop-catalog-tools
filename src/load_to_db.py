@@ -25,11 +25,14 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
     # Find all parquet files recursively
     parquet_files = glob.glob(os.path.join(download_path, "**/*.parquet"), recursive=True)
     
+    total_products = 0
+    
     # Create table with first file
     if parquet_files:
         first_df = pd.read_parquet(parquet_files[0])
         first_df.to_sql(table_name, conn, if_exists="replace", index=False)
-        logger.info(f"Created table {table_name} with schema from first file")
+        total_products += len(first_df)
+        logger.info(f"Created table {table_name} with schema from first file ({len(first_df)} products)")
         parquet_files = parquet_files[1:]  # Remove first file from list
     
     # Append remaining files
@@ -45,13 +48,14 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
             
             # Write to SQLite
             df.to_sql(table_name, conn, if_exists="append", index=False)
+            total_products += len(df)
             logger.info(f"Successfully loaded {len(df)} rows into {table_name}")
             
         except Exception as e:
             logger.error(f"Error loading {parquet_file}: {str(e)}")
     
     conn.close()
-    logger.info("Finished loading all parquet files to SQLite database")
+    logger.info(f"Finished loading all parquet files to SQLite database. Total products: {total_products}")
 
 
 def main() -> None:
@@ -65,7 +69,7 @@ def main() -> None:
     parser.add_argument(
         "--download",
         type=str,
-        help="Path to downloaded parquet files",
+        help="Path to the downloaded parquet files",
         required=True,
     )
 

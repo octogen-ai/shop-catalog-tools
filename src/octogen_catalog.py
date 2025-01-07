@@ -2,16 +2,64 @@ import argparse
 import asyncio
 import logging
 import os
+from typing import List
 
 from asyncer import asyncify
 from dotenv import load_dotenv
 from google.cloud import storage
+from google.cloud.storage.blob import Blob
 
+# Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+# Suppress google-cloud-storage logging
+logging.getLogger('google.resumable_media._helpers').setLevel(logging.WARNING)
 
+async def download_blob(
+    blob: Blob,
+    download_path: str,
+    semaphore: asyncio.Semaphore,
+    position: int
+) -> None:
+    async with semaphore:
+        full_path = os.path.join(download_path, os.path.dirname(blob.name))
+        os.makedirs(full_path, exist_ok=True)
+        dest_path = os.path.join(download_path, blob.name)
+        
+        from tqdm import tqdm
+        CHUNK_SIZE = 1024 * 1024  # 1MB chunks
+        
+        # Create progress bar for this file
+        desc = f"Downloading {os.path.basename(blob.name)}"
+        with tqdm(
+            total=blob.size,
+            unit='B',
+            unit_scale=True,
+            desc=desc.ljust(50)[:50],  # Pad description for alignment
+            leave=True,  # Keep the progress bar after completion
+            dynamic_ncols=True,  # Adapt to terminal width
+            position=position,  # Use passed position
+            miniters=1,  # Update at least every iteration
+            ascii=False,  # Use ASCII characters for the progress bar
+        ) as pbar:
+            # Download the blob in chunks
+            start = 0
+            end = blob.size - 1
+            
+            with open(dest_path, 'wb') as f:
+                while start <= end:
+                    chunk_end = min(start + CHUNK_SIZE - 1, end)
+                    chunk = await asyncify(blob.download_as_bytes)(
+                        start=start,
+                        end=chunk_end
+                    )
+                    f.write(chunk)
+                    chunk_size = len(chunk)
+                    pbar.update(chunk_size)
+                    start += chunk_size
 
 async def download_catalog(
     *,
@@ -19,6 +67,7 @@ async def download_catalog(
     octogen_customer_name: str,
     catalog: str,
     download_path: str,
+    max_concurrent: int = 4, # the number of files to download concurrently
 ) -> None:
     prefix = f"{octogen_customer_name}/catalog={catalog}/"
     logger.info(
@@ -28,15 +77,23 @@ async def download_catalog(
     storage_client = storage.Client()
     bucket = storage_client.bucket(octogen_catalog_bucket)
     blobs = await asyncify(bucket.list_blobs)(prefix=prefix)
-    for blob in blobs:
-        if blob.name.endswith(".parquet"):
-            full_path = os.path.join(download_path, os.path.dirname(blob.name))
-            os.makedirs(full_path, exist_ok=True)
-            logger.info(f"Downloading {blob.name}")
-            await asyncify(blob.download_to_filename)(
-                os.path.join(download_path, blob.name)
-            )
+    
+    # Convert to list to get total count
+    blobs = [blob for blob in blobs if blob.name.endswith(".parquet")]
+    total_size = sum(blob.size for blob in blobs)
+    logger.info(f"Found {len(blobs)} files to download. Total size: {total_size / (1024*1024):.2f} MB")
 
+    # Create a semaphore to limit concurrent downloads
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    # Create download tasks for each blob
+    tasks = []
+    for i, blob in enumerate(blobs):
+        task = download_blob(blob, download_path, semaphore, i)
+        tasks.append(task)
+    
+    # Run downloads concurrently
+    await asyncio.gather(*tasks)
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Octogen Catalog Tools")
