@@ -6,6 +6,7 @@ import sqlite3
 import os
 from whoosh.index import open_dir
 from whoosh.qparser import QueryParser
+import math
 
 app = FastAPI()
 
@@ -25,13 +26,32 @@ async def root():
     return FileResponse("src/app/dist/index.html")
 
 @app.get("/api/products")
-async def get_products(limit: int = 200):
+async def get_products(page: int = 1, per_page: int = 12):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT extracted_product FROM anntaylor LIMIT ?", (limit,))
+    
+    # Get total count
+    cursor.execute("SELECT COUNT(*) FROM anntaylor")
+    total_count = cursor.fetchone()[0]
+    
+    # Calculate offset
+    offset = (page - 1) * per_page
+    
+    # Get paginated results
+    cursor.execute(
+        "SELECT extracted_product FROM anntaylor LIMIT ? OFFSET ?", 
+        (per_page, offset)
+    )
     products = cursor.fetchall()
     conn.close()
-    return JSONResponse([json.loads(row['extracted_product']) for row in products])
+    
+    return JSONResponse({
+        "products": [json.loads(row['extracted_product']) for row in products],
+        "total": total_count,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": math.ceil(total_count / per_page)
+    })
 
 @app.get("/api/search")
 async def search_products(query: str):
