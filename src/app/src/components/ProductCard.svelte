@@ -46,7 +46,12 @@
   </script>
   
   <div class="bg-white rounded-lg shadow-md overflow-hidden {expanded ? 'col-span-full' : ''}">
-    <div class="cursor-pointer" on:click={() => onToggleExpand(product)}>
+    <button 
+        type="button"
+        class="w-full text-left cursor-pointer"
+        on:click={() => onToggleExpand(product)}
+        aria-expanded={expanded}
+    >
       <div class="relative">
         {#if allImages && allImages.length > 0}
           <img 
@@ -86,7 +91,7 @@
           </p>
         {/if}
       </div>
-    </div>
+    </button>
 
     {#if expanded && product.hasVariant}
       <div class="border-t p-4">
