@@ -69,7 +69,7 @@ def main() -> None:
     parser.add_argument(
         "--download",
         type=str,
-        help="Path to downloaded parquet files",
+        help="Path to the downloaded parquet files",
         required=True,
     )
 
