@@ -14,10 +14,11 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app")
 
 # Database connection
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "anntaylor_catalog.db")
-INDEX_DIR = "/tmp/whoosh" 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+def get_db_connection(table_name: str):
+    db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.db")
+    if not os.path.exists(db_path):
+        raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.db not found")
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -25,13 +26,13 @@ def get_db_connection():
 async def root():
     return FileResponse("src/app/dist/index.html")
 
-@app.get("/api/products")
-async def get_products(page: int = 1, per_page: int = 12):
-    conn = get_db_connection()
+@app.get("/api/{table_name}/products")
+async def get_products(table_name: str, page: int = 1, per_page: int = 12):
+    conn = get_db_connection(table_name)
     cursor = conn.cursor()
     
     # Get total count
-    cursor.execute("SELECT COUNT(*) FROM anntaylor")
+    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
     total_count = cursor.fetchone()[0]
     
     # Calculate offset
@@ -39,7 +40,7 @@ async def get_products(page: int = 1, per_page: int = 12):
     
     # Get paginated results
     cursor.execute(
-        "SELECT extracted_product FROM anntaylor LIMIT ? OFFSET ?", 
+        f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?", 
         (per_page, offset)
     )
     products = cursor.fetchall()
@@ -53,17 +54,19 @@ async def get_products(page: int = 1, per_page: int = 12):
         "total_pages": math.ceil(total_count / per_page)
     })
 
-@app.get("/api/search")
-async def search_products(query: str):
+@app.get("/api/{table_name}/search")
+async def search_products(table_name: str, query: str):
     # Open Whoosh index
-    ix = open_dir(INDEX_DIR)
+    index_dir = f"/tmp/whoosh/{table_name}"
+    if not os.path.exists(index_dir):
+        raise HTTPException(status_code=404, detail=f"Search index not found for {table_name}")
+    
+    ix = open_dir(index_dir)
     parser = QueryParser("description", schema=ix.schema)
     parsed_query = parser.parse(query)
 
-    # Get search results from Whoosh
     with ix.searcher() as searcher:
         results = searcher.search(parsed_query)
-        # Extract product IDs from search results
         product_ids = [result['id'] for result in results]
 
     if not product_ids:
@@ -73,14 +76,13 @@ async def search_products(query: str):
         })
 
     # Get full product data from SQLite
-    conn = get_db_connection()
+    conn = get_db_connection(table_name)
     cursor = conn.cursor()
     
-    # Create placeholders for SQL IN clause
     placeholders = ','.join(['?' for _ in product_ids])
     
     cursor.execute(
-        f"SELECT extracted_product FROM anntaylor WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
+        f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
         product_ids
     )
     products = cursor.fetchall()
