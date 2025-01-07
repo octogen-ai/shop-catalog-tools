@@ -134,12 +134,16 @@ def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_siz
 
 def main():
     parser = argparse.ArgumentParser(description="Index products using Whoosh")
-    parser.add_argument("--db_path", type=str, help="Path to the SQLite database", required=True)
-    parser.add_argument("--index_dir", type=str, help="Directory to store the Whoosh index", required=True)
+    parser.add_argument("--db_path", type=str, help="Path to the SQLite database")
+    parser.add_argument("--index_dir", type=str, help="Directory to store the Whoosh index")
     parser.add_argument("--table_name", type=str, help="Name of the table to index", required=True)
     parser.add_argument("--batch_size", type=int, help="Batch size for indexing", default=1000)
 
     args = parser.parse_args()
+    if not args.index_dir:
+        args.index_dir = f"/tmp/whoosh/{args.table_name}"
+    if not args.db_path:
+        args.db_path = f"{args.table_name}_catalog.db"
     create_whoosh_index(args.db_path, args.index_dir, args.table_name, args.batch_size)
 
 if __name__ == "__main__":
