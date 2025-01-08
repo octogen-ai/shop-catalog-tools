@@ -66,7 +66,7 @@ async def main() -> None:
     parser.add_argument(
         "--download",
         type=str,
-        default="/tmp/octogen-catalog-exchange",
+        default="octogen-catalog-exchange",
         help="Path where catalog files will be downloaded"
     )
     parser.add_argument(
