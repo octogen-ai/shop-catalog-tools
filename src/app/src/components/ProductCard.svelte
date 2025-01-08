@@ -43,6 +43,29 @@
         half: index === Math.floor(rating) && rating % 1 >= 0.5
       }));
     }
+
+    // Helper function to group variants by image URL
+    function groupVariantsByImage(variants) {
+      return variants.reduce((acc, variant) => {
+        const imageUrl = variant.image?.url;
+        if (!acc[imageUrl]) {
+          acc[imageUrl] = {
+            ...variant,
+            colors: variant.color_info?.colors || [],
+            sizes: variant.sizes || [],
+          };
+        } else {
+          // Merge colors and sizes
+          if (variant.color_info?.colors) {
+            acc[imageUrl].colors = [...new Set([...acc[imageUrl].colors, ...variant.color_info.colors])];
+          }
+          if (variant.sizes) {
+            acc[imageUrl].sizes = [...new Set([...acc[imageUrl].sizes, ...variant.sizes])];
+          }
+        }
+        return acc;
+      }, {});
+    }
   </script>
   
   <div class="bg-white rounded-lg shadow-md overflow-hidden {expanded ? 'col-span-full' : ''}">
@@ -79,22 +102,45 @@
       <div class="p-4">
         <div class="flex justify-between items-start mb-2">
           <h3 class="text-lg font-semibold">{product.name}</h3>
-          <a
-            href={`/api/${product.catalog}/product/${product.id}/raw`}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-gray-500 hover:text-gray-700"
-            title="View Raw JSON"
-          >
-          <div class="relative group">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
-            </svg>
-            <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
-              Raw product data
+          <div class="flex gap-2">
+            {#if product.url}
+              <a
+                href={product.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-gray-500 hover:text-gray-700"
+                title="View on Retailer Site"
+                on:click|stopPropagation
+              >
+                <div class="relative group">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                    <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                  </svg>
+                  <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
+                    View on retailer site
+                  </div>
+                </div>
+              </a>
+            {/if}
+            <a
+              href={`/api/${product.catalog}/product/${product.id}/raw?format=tree`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-gray-500 hover:text-gray-700"
+              title="View Raw JSON"
+              on:click|stopPropagation
+            >
+            <div class="relative group">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+              <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
+                Raw product data
+              </div>
             </div>
+            </a>
           </div>
-          </a>
           
         </div>
         <p class="text-gray-600 mb-2">${product.price_info?.price}</p>
@@ -151,7 +197,7 @@
 
         <h4 class="text-lg font-semibold mb-4">Available Variants</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {#each product.hasVariant as variant}
+          {#each Object.values(groupVariantsByImage(product.hasVariant)) as variant}
             {#if variant}
               <div class="border rounded p-4">
                 {#if variant.image}
@@ -163,11 +209,11 @@
                 {/if}
                 <h5 class="font-medium mb-1">{variant.name}</h5>
                 <p class="text-gray-600 mb-1">${variant.price_info?.price}</p>
-                {#if variant.color_info?.colors}
-                  <p class="text-sm text-gray-500">Color: {variant.color_info.colors.join(', ')}</p>
+                {#if variant.colors?.length > 0}
+                  <p class="text-sm text-gray-500">Colors: {variant.colors.join(', ')}</p>
                 {/if}
-                {#if variant.sizes}
-                  <p class="text-sm text-gray-500">Size: {variant.sizes.join(', ')}</p>
+                {#if variant.sizes?.length > 0}
+                  <p class="text-sm text-gray-500">Sizes: {variant.sizes.join(', ')}</p>
                 {/if}
                 {#if variant.availability}
                   {@const availInfo = getAvailabilityInfo(variant.availability)}

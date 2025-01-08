@@ -1,12 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 import json
 import sqlite3
 import os
 from whoosh.index import open_dir
-from whoosh.qparser import QueryParser
+from whoosh.qparser import QueryParser, MultifieldParser
 import math
+import yaml
+from fastapi.templating import Jinja2Templates
+from pathlib import Path
 
 app = FastAPI()
 
@@ -21,6 +24,9 @@ def get_db_connection(table_name: str):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
+
+# Add to imports at top
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/")
 async def root():
@@ -55,24 +61,45 @@ async def get_products(table_name: str, page: int = 1, per_page: int = 12):
     })
 
 @app.get("/api/{table_name}/search")
-async def search_products(table_name: str, query: str):
+async def search_products(table_name: str, query: str, page: int = 1, per_page: int = 12):
     # Open Whoosh index
     index_dir = f"/tmp/whoosh/{table_name}"
     if not os.path.exists(index_dir):
         raise HTTPException(status_code=404, detail=f"Search index not found for {table_name}")
     
     ix = open_dir(index_dir)
-    parser = QueryParser("description", schema=ix.schema)
+    
+    # Search across all relevant text fields
+    searchable_fields = [
+        "name",
+        "description",
+        "brand_name",
+        "extra_text",
+        "tags",
+        "categories",
+        "materials",
+        "patterns",
+        "colors",
+        "sizes"
+    ]
+    
+    parser = MultifieldParser(searchable_fields, schema=ix.schema)
     parsed_query = parser.parse(query)
-
+    
     with ix.searcher() as searcher:
-        results = searcher.search(parsed_query)
+        # Use search_page for pagination
+        results = searcher.search_page(parsed_query, page, pagelen=per_page)
+        total_count = results.total
         product_ids = [result['id'] for result in results]
-
+        print(f"Found {total_count} total products, returning page {page} for query: {query}")
+    
     if not product_ids:
         return JSONResponse({
             "products": [],
-            "total": 0
+            "total": 0,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": 0
         })
 
     # Get full product data from SQLite
@@ -90,12 +117,40 @@ async def search_products(table_name: str, query: str):
 
     return JSONResponse({
         "products": [json.loads(row['extracted_product']) for row in products],
-        "total": len(products)
+        "total": total_count,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": math.ceil(total_count / per_page)
     })
 
+def format_yaml_as_html(yaml_str: str) -> str:
+    lines = yaml_str.split('\n')
+    processed_lines = []
+    
+    for line in lines:
+        if ':' in line:
+            # Split on first colon and handle attribute names
+            attr_name, value = line.split(':', 1)
+            if 'url' in attr_name:
+                # Handle URL values specially
+                url = value.strip()
+                processed_lines.append(f'<strong>{attr_name}</strong>: <a href="{url}">{url}</a>')
+            else:
+                # Make regular attributes bold
+                processed_lines.append(f'<strong>{attr_name}</strong>:{value}')
+        else:
+            processed_lines.append(line)
+    
+    return '<pre>' + '\n'.join(processed_lines) + '</pre>'
+
 @app.get("/api/{table}/product/{product_id}/raw")
-async def get_raw_product(table: str, product_id: str):
-    conn = sqlite3.connect(f"{table}_catalog.db")
+async def get_raw_product(
+    request: Request,
+    table: str, 
+    product_id: str, 
+    format: str = "json"
+):
+    conn = get_db_connection(table)
     cursor = conn.cursor()
     
     cursor.execute(
@@ -107,5 +162,29 @@ async def get_raw_product(table: str, product_id: str):
     
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
-        
-    return json.loads(result[0])
+    
+    data = json.loads(result[0])
+    formats = {
+        'json': 'JSON',
+        'yaml': 'YAML',
+        'tree': 'Tree View'
+    }
+    
+    template_context = {
+        "request": request,
+        "formats": formats,
+        "current_format": format.lower(),
+        "format": format.lower(),
+        "json_data": json.dumps(data)
+    }
+    
+    if format.lower() == "yaml":
+        yaml_str = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+        template_context["content"] = format_yaml_as_html(yaml_str)
+    elif format.lower() == "json":
+        template_context["content"] = json.dumps(data, indent=2)
+    
+    return templates.TemplateResponse(
+        "product_view.html",
+        template_context
+    )
