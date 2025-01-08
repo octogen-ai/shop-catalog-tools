@@ -3,6 +3,7 @@
     import ProductCard from './components/ProductCard.svelte';
     import Pagination from './components/Pagination.svelte';
     import CatalogSelector from './components/CatalogSelector.svelte';
+    import ProductCardSkeleton from './components/ProductCardSkeleton.svelte';
     
     let products = [];
     let searchQuery = '';
@@ -12,12 +13,16 @@
     let expandedProductId = null;
     let currentPage = 1;
     let totalPages = 1;
+    let searchCurrentPage = 1;
+    let searchTotalPages = 1;
     let totalProducts = 0;
     let perListPage = 100; // per page for list view
     let perSearchPage = 9; // per page for search view
     let pageSizeOptions = [100, 200, 300, 400];
     let totalSearchResults = 0;
     let searchAttempted = false;
+    let isLoadingProducts = false;  // New state for main products loading
+    let isLoadingSearch = false;    // New state for search results loading
     
     // Get table name from URL path
     $: tableName = window.location.pathname.split('/')[1] || 'anntaylor';
@@ -30,20 +35,19 @@
     }
 
     async function loadProducts(page = 1) {
-        loading = true;
+        isLoadingProducts = true;
         const res = await fetch(`/api/${tableName}/products?page=${page}&per_page=${perListPage}`);
         const data = await res.json();
         products = data.products;
         totalPages = data.total_pages;
         totalProducts = data.total;
         currentPage = data.page;
-        loading = false;
+        isLoadingProducts = false;
     }
 
     async function handlePageChange(event) {
         const newPage = event.detail;
         await loadProducts(newPage);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     async function handleSearch(event, page = 1) {
@@ -56,14 +60,14 @@
             searchAttempted = false;
             return;
         }
-        searching = true;
+        isLoadingSearch = true;
         const res = await fetch(`/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perSearchPage}`);
         const data = await res.json();
         searchResults = data.products;
         totalSearchResults = data.total;
-        totalPages = data.total_pages;
-        currentPage = data.page;
-        searching = false;
+        searchTotalPages = data.total_pages;
+        searchCurrentPage = data.page;
+        isLoadingSearch = false;
         searchAttempted = true;
     }
 
@@ -90,8 +94,8 @@
 
 <main class="container mx-auto px-4 py-8">
     <div class="max-w-7xl mx-auto">
-        <CatalogSelector />
-        <h1 class="text-3xl font-bold mb-8">{tableName} Product Catalog</h1>
+        
+        <h1 class="text-3xl font-bold mb-8"> <CatalogSelector />Product Catalog</h1>
         
         <div class="mb-8">
             <div class="flex gap-2">
@@ -112,12 +116,12 @@
             </div>
         </div>
 
-        {#if searchQuery && searchResults.length > 0}
+        {#if searchQuery && (searchResults.length > 0 || isLoadingSearch)}
             <div class="mb-8">
                 <div class="mt-6">
                     <Pagination 
-                        currentPage={currentPage}
-                        totalPages={totalPages}
+                        currentPage={searchCurrentPage}
+                        totalPages={searchTotalPages}
                         on:pageChange={handleSearchPageChange}
                     />
                 </div>
@@ -126,18 +130,24 @@
                     <span class="text-gray-600">Found {totalSearchResults} products</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {#each searchResults as product}
-                        <ProductCard 
-                            {product} 
-                            expanded={expandedProductId === product.id}
-                            onToggleExpand={handleToggleExpand}
-                        />
-                    {/each}
+                    {#if isLoadingSearch}
+                        {#each Array(perSearchPage) as _}
+                            <ProductCardSkeleton />
+                        {/each}
+                    {:else}
+                        {#each searchResults as product}
+                            <ProductCard 
+                                {product} 
+                                expanded={expandedProductId === product.id}
+                                onToggleExpand={handleToggleExpand}
+                            />
+                        {/each}
+                    {/if}
                 </div>
                 <div class="mt-6">
                     <Pagination 
-                        currentPage={currentPage}
-                        totalPages={totalPages}
+                        currentPage={searchCurrentPage}
+                        totalPages={searchTotalPages}
                         on:pageChange={handleSearchPageChange}
                     />
                 </div>
@@ -153,18 +163,20 @@
             <span class="text-gray-600">Total: {totalProducts} products</span>
         </div>
 
-        {#if loading}
-            <p class="text-gray-600">Loading products...</p>
-        {:else}
-            <div class="mb-6">
-                <Pagination 
-                    {currentPage}
-                    {totalPages}
-                    on:pageChange={handlePageChange}
-                />
-            </div>
+        <div class="mb-6">
+            <Pagination 
+                currentPage={currentPage}
+                totalPages={totalPages}
+                on:pageChange={handlePageChange}
+            />
+        </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {#if isLoadingProducts}
+                {#each Array(perListPage) as _}
+                    <ProductCardSkeleton />
+                {/each}
+            {:else}
                 {#each products as product}
                     <ProductCard 
                         {product} 
@@ -172,16 +184,16 @@
                         onToggleExpand={handleToggleExpand}
                     />
                 {/each}
-            </div>
+            {/if}
+        </div>
 
-            <div class="mt-6">
-                <Pagination 
-                    {currentPage}
-                    {totalPages}
-                    on:pageChange={handlePageChange}
-                />
-            </div>
-        {/if}
+        <div class="mt-6">
+            <Pagination 
+                currentPage={currentPage}
+                totalPages={totalPages}
+                on:pageChange={handlePageChange}
+            />
+        </div>
 
         <div class="flex justify-end mb-4">
             <select 

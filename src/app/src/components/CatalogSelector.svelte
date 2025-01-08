@@ -7,7 +7,6 @@
     }
 </script>
 
-<div class="mb-4">
     <select 
         bind:value={currentCatalog} 
         on:change={() => switchCatalog(currentCatalog)}
@@ -17,4 +16,3 @@
             <option value={catalog}>{catalog}</option>
         {/each}
     </select>
-</div>
