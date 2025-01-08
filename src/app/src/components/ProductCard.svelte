@@ -1,4 +1,5 @@
 <script>
+    import { fade } from 'svelte/transition';
     import RatingDisplay from './RatingDisplay.svelte';
     import ReviewList from './ReviewList.svelte';
     export let product;
@@ -94,11 +95,13 @@
         class="w-full h-full text-left cursor-pointer"
         on:click={() => onToggleExpand(product)}
         aria-expanded={expanded}
+        transition:fade={{ duration: 500 }}
       >
-        <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col {expanded ? 'col-span-full' : ''}">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
           <div class="relative">
             {#if allImages && allImages.length > 0}
               <img 
+                in:fade={{ duration: 500 }}
                 src={allImages[currentImageIndex].url} 
                 alt={product.name} 
                 class="w-full h-64 object-cover"
@@ -120,7 +123,7 @@
             {/if}
           </div>
 
-          <div class="p-4 flex-1 flex flex-col">
+          <div class="p-4 flex-1 flex flex-col" in:fade={{ duration: 500 }}>
             <div class="flex justify-between items-start mb-2">
               <h3 class="text-lg font-semibold">{product.name}</h3>
               <div class="flex gap-2">
@@ -195,6 +198,7 @@
         on:click={handleBackgroundClick}
         on:keydown={(e) => e.key === 'Escape' && onToggleExpand(product)}
         aria-label="Product details"
+        transition:fade={{ duration: 500 }}
       >
         <div role="dialog" aria-modal="true" class="min-h-screen px-4 flex items-center justify-center">
           <div class="bg-white w-full max-w-7xl rounded-lg shadow-xl">
