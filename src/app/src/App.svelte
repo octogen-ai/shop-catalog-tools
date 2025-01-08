@@ -12,6 +12,8 @@
     let expandedProductId = null;
     let currentPage = 1;
     let totalPages = 1;
+    let searchCurrentPage = 1;
+    let searchTotalPages = 1;
     let totalProducts = 0;
     let perListPage = 100; // per page for list view
     let perSearchPage = 9; // per page for search view
@@ -43,7 +45,6 @@
     async function handlePageChange(event) {
         const newPage = event.detail;
         await loadProducts(newPage);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     async function handleSearch(event, page = 1) {
@@ -61,8 +62,8 @@
         const data = await res.json();
         searchResults = data.products;
         totalSearchResults = data.total;
-        totalPages = data.total_pages;
-        currentPage = data.page;
+        searchTotalPages = data.total_pages;
+        searchCurrentPage = data.page;
         searching = false;
         searchAttempted = true;
     }
@@ -90,8 +91,8 @@
 
 <main class="container mx-auto px-4 py-8">
     <div class="max-w-7xl mx-auto">
-        <CatalogSelector />
-        <h1 class="text-3xl font-bold mb-8">{tableName} Product Catalog</h1>
+        
+        <h1 class="text-3xl font-bold mb-8"> <CatalogSelector />Product Catalog</h1>
         
         <div class="mb-8">
             <div class="flex gap-2">
@@ -116,8 +117,8 @@
             <div class="mb-8">
                 <div class="mt-6">
                     <Pagination 
-                        currentPage={currentPage}
-                        totalPages={totalPages}
+                        currentPage={searchCurrentPage}
+                        totalPages={searchTotalPages}
                         on:pageChange={handleSearchPageChange}
                     />
                 </div>
@@ -136,8 +137,8 @@
                 </div>
                 <div class="mt-6">
                     <Pagination 
-                        currentPage={currentPage}
-                        totalPages={totalPages}
+                        currentPage={searchCurrentPage}
+                        totalPages={searchTotalPages}
                         on:pageChange={handleSearchPageChange}
                     />
                 </div>

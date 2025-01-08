@@ -1,4 +1,6 @@
 <script>
+    import RatingDisplay from './RatingDisplay.svelte';
+    import ReviewList from './ReviewList.svelte';
     export let product;
     export let expanded = false;
     export let onToggleExpand = () => {};
@@ -34,14 +36,6 @@
         default:
           return { icon: '?', color: 'text-gray-500', text: 'Unknown' };
       }
-    }
-
-    // Generate array of 5 stars for rating
-    function getRatingStars(rating) {
-      return Array(5).fill(null).map((_, index) => ({
-        filled: index < Math.floor(rating),
-        half: index === Math.floor(rating) && rating % 1 >= 0.5
-      }));
     }
 
     // Helper function to group variants by image URL
@@ -97,11 +91,11 @@
     {#if !expanded}
       <button 
         type="button"
-        class="w-full text-left cursor-pointer"
+        class="w-full h-full text-left cursor-pointer"
         on:click={() => onToggleExpand(product)}
         aria-expanded={expanded}
       >
-        <div class="bg-white rounded-lg shadow-md overflow-hidden {expanded ? 'col-span-full' : ''}">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col {expanded ? 'col-span-full' : ''}">
           <div class="relative">
             {#if allImages && allImages.length > 0}
               <img 
@@ -126,7 +120,7 @@
             {/if}
           </div>
 
-          <div class="p-4">
+          <div class="p-4 flex-1 flex flex-col">
             <div class="flex justify-between items-start mb-2">
               <h3 class="text-lg font-semibold">{product.name}</h3>
               <div class="flex gap-2">
@@ -170,29 +164,39 @@
               </div>
               
             </div>
-            <p class="text-gray-600 mb-2">${product.price_info?.price}</p>
-            {#if product.availability}
-              {@const availInfo = getAvailabilityInfo(product.availability)}
-              <p class={availInfo.color}>
-                {availInfo.icon} {availInfo.text}
-              </p>
-            {/if}
-            {#if product.hasVariant?.length}
-              <p class="text-sm text-blue-600 mt-2">
-                {product.hasVariant.length} variants available
-              </p>
-            {/if}
+            <div class="flex-1 flex flex-col justify-between">
+              <div>
+                {#if product.rating}
+                  <div class="mb-2">
+                    <RatingDisplay rating={product.rating} size="sm" />
+                  </div>
+                {/if}
+                <p class="text-gray-600 mb-2">${product.price_info?.price}</p>
+                {#if product.availability}
+                  {@const availInfo = getAvailabilityInfo(product.availability)}
+                  <p class={availInfo.color}>
+                    {availInfo.icon} {availInfo.text}
+                  </p>
+                {/if}
+                {#if product.hasVariant?.length}
+                  <p class="text-sm text-blue-600 mt-2">
+                    {product.hasVariant.length} variants available
+                  </p>
+                {/if}
+              </div>
+            </div>
           </div>
         </div>
       </button>
     {:else}
       <!-- Full screen overlay -->
-      <div 
-        class="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto"
+      <button 
+        class="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto w-full border-none"
         on:click={handleBackgroundClick}
         on:keydown={(e) => e.key === 'Escape' && onToggleExpand(product)}
+        aria-label="Product details"
       >
-        <div class="min-h-screen px-4 flex items-center justify-center">
+        <div role="dialog" aria-modal="true" class="min-h-screen px-4 flex items-center justify-center">
           <div class="bg-white w-full max-w-7xl rounded-lg shadow-xl">
             <!-- Close button -->
             <div class="flex justify-end p-4">
@@ -236,6 +240,12 @@
                       <h1 class="text-xl font-medium text-gray-900">{product.name}</h1>
                       <p class="text-xl font-medium text-gray-900">${product.price_info?.price}</p>
                     </div>
+
+                    {#if product.rating}
+                      <div class="mt-2">
+                        <RatingDisplay rating={product.rating} size="md" />
+                      </div>
+                    {/if}
 
                     {#if product.availability}
                       {@const availInfo = getAvailabilityInfo(product.availability)}
@@ -329,12 +339,25 @@
                         </div>
                       </div>
                     {/if}
+
+                    <!-- Customer Reviews -->
+                    {#if product.review && product.review.length > 0}
+                      <div class="mt-8 border-t border-gray-200 pt-8">
+                        <div class="flex items-center justify-between">
+                          <h2 class="text-sm font-medium text-gray-900">Customer Reviews</h2>
+                          <span class="text-sm text-gray-500">{product.review.length} reviews</span>
+                        </div>
+                        <div class="mt-4">
+                          <ReviewList reviews={product.review} />
+                        </div>
+                      </div>
+                    {/if}
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </button>
     {/if}
   </div>
