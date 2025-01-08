@@ -170,5 +170,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 *.db
+*.json
 google_credentials.json
 node_modules/

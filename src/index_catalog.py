@@ -48,6 +48,10 @@ schema = Schema(
 
 def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_size: int = 1000):
     """Create a Whoosh index from SQLite database contents"""
+    if not index_dir:
+        index_dir = f"/tmp/whoosh/{table_name}"
+    if not db_path:
+        db_path = f"{table_name}_catalog.db"
     if not os.path.exists(db_path):
         print(f"Database file {db_path} does not exist")
         return
@@ -140,10 +144,7 @@ def main():
     parser.add_argument("--batch_size", type=int, help="Batch size for indexing", default=1000)
 
     args = parser.parse_args()
-    if not args.index_dir:
-        args.index_dir = f"/tmp/whoosh/{args.table_name}"
-    if not args.db_path:
-        args.db_path = f"{args.table_name}_catalog.db"
+
     create_whoosh_index(args.db_path, args.index_dir, args.table_name, args.batch_size)
 
 if __name__ == "__main__":
