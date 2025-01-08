@@ -67,7 +67,18 @@ We've also included a script to read the structured products into a pandas dataf
 uv run src/read_structured_products.py --catalog anntaylor --db_path anntaylor_catalog.db
 ```
 
-### 7. Run a sample UI! 
+### 7. Index the data 
+To run a local search-engine, we're using Whoosh, which is a fast, featureful full-text indexing and searching library implemented in pure
+Python.
+
+```
+uv run src/index_catalog.py --table_name anntaylor
+uv run src/index_catalog.py --table_name heydude
+uv run src/index_catalog.py --table_name chairish
+```
+You can use the search in the UI. See below. 
+
+### 8. Run a sample UI! 
 
 I've included a sample UI in `src/app/src/App.svelte`. To run it, you can use the following command.
 
