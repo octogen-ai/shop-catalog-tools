@@ -1,0 +1,17 @@
+<div style="
+    background-color: #f8f9fa;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #dee2e6;
+    font-family: sans-serif;
+">
+    View as: 
+    {% for fmt, label in formats.items() %}
+        {% if fmt == current_format %}
+            <strong>{{ label }}</strong>
+        {% else %}
+            <a href="?format={{ fmt }}">{{ label }}</a>
+        {% endif %}
+        {% if not loop.last %} | {% endif %}
+    {% endfor %}
+</div>
