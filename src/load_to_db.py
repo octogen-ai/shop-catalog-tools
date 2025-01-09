@@ -14,14 +14,8 @@ logging.basicConfig(
 )
 
 
-def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
+def load_parquet_files_to_sqlite(download_path: str, catalog: str, ) -> None:
     """Load all parquet files from the download path into a SQLite database."""
-    octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")    
-    if not octogen_customer_name:
-        logger.error("Please set OCTOGEN_CUSTOMER_NAME in the .env file.")
-        return
-    if octogen_customer_name not in download_path:
-        download_path: str = os.path.join(download_path, octogen_customer_name, f"catalog={catalog}")
 
     db_path = os.path.join(os.path.dirname(__file__), "..", f"{catalog}_catalog.db")
     logger.info(f"Loading parquet files from {download_path} into {db_path}")
@@ -39,6 +33,7 @@ def load_parquet_files_to_sqlite(download_path: str, catalog: str) -> None:
     # Create table with first file
     if parquet_files:
         first_df = pd.read_parquet(parquet_files[0])
+        print(first_df.columns)
         first_df.to_sql(table_name, conn, if_exists="replace", index=False)
         total_products += len(first_df)
         logger.info(f"Created table {table_name} with schema from first file ({len(first_df)} products)")

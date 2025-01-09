@@ -21,21 +21,27 @@ async def process_catalog(
     catalog: str,
     download_path: str,
     index_dir: Optional[str] = None,
-    batch_size: int = 1000
+    batch_size: int = 1000,
+    read_from_local_files: bool = False
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     try:
         # Step 1: Download catalog
-        logger.info(f"Step 1: Downloading catalog {catalog}")
-        octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
-        octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
-        
-        await download_catalog(
-            octogen_catalog_bucket=octogen_catalog_bucket,
-            octogen_customer_name=octogen_customer_name,
-            catalog=catalog,
-            download_path=download_path
-        )
+        if read_from_local_files:
+            logger.info(f"Step 1: Reading catalog {catalog} from local files")
+        else:
+            logger.info(f"Step 1: Downloading catalog {catalog}")
+            octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
+            octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
+            
+            if octogen_customer_name not in download_path:
+                download_path = os.path.join(download_path, octogen_customer_name, f"catalog={catalog}")
+            await download_catalog(
+                octogen_catalog_bucket=octogen_catalog_bucket,
+                octogen_customer_name=octogen_customer_name,
+                catalog=catalog,
+                download_path=download_path
+            )
 
         # Step 2: Load to database
         logger.info(f"Step 2: Loading catalog {catalog} to database")
@@ -80,6 +86,12 @@ async def main() -> None:
         default=1000,
         help="Batch size for indexing"
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        default=False,
+        help="Read catalog from local files instead of downloading from GCS"
+    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -88,12 +100,13 @@ async def main() -> None:
             "Please see README.md for more information on how to set up the .env file."
         )
         return
-
+    download_path: str = args.download if not args.local else f"/tmp/octogen.extractor/{args.catalog}"
     await process_catalog(
         catalog=args.catalog,
-        download_path=args.download,
+        download_path=download_path,
         index_dir=args.index_dir,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        read_from_local_files=args.local
     )
 
 if __name__ == "__main__":
