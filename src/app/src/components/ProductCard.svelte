@@ -67,14 +67,16 @@
       if (event.target === event.currentTarget) {
         onToggleExpand(product);
       }
+      return;
     }
 
     function handleEscape(event) {
-      console.log('Key pressed:', event.key); // Debug log
+      // console.log('Key pressed:', event.key); // Debug log
       if (event.key === 'Escape') {
         console.log('Escape key detected!'); // Debug log
         onToggleExpand(product);
       }
+      return;
     }
 
     $: {
