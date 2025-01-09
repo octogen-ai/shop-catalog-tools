@@ -7,7 +7,7 @@ from typing import Optional
 from dotenv import load_dotenv
 # Import functions from existing scripts
 from octogen_catalog import download_catalog
-from load_to_db import load_parquet_files_to_sqlite
+from load_to_db import load_parquet_files_to_db
 from index_catalog import create_whoosh_index
 
 # Configure logging
@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 
 async def process_catalog(
     catalog: str,
-    download_path: str,
+    download_to: str,
     index_dir: Optional[str] = None,
     batch_size: int = 1000,
-    read_from_local_files: bool = False
+    read_from_local_files: bool = False,
+    db_type: str = "sqlite"
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     try:
@@ -34,25 +35,25 @@ async def process_catalog(
             octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
             octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
             
-            if octogen_customer_name not in download_path:
-                download_path = os.path.join(download_path, octogen_customer_name, f"catalog={catalog}")
+            if octogen_customer_name not in download_to:
+                download_to = os.path.join(download_to, octogen_customer_name, f"catalog={catalog}")
             await download_catalog(
                 octogen_catalog_bucket=octogen_catalog_bucket,
                 octogen_customer_name=octogen_customer_name,
                 catalog=catalog,
-                download_path=download_path
+                download_path=download_to
             )
 
         # Step 2: Load to database
-        logger.info(f"Step 2: Loading catalog {catalog} to database")
-        load_parquet_files_to_sqlite(download_path, catalog)
+        logger.info(f"Step 2: Loading catalog {catalog} to {db_type} database")
+        load_parquet_files_to_db(download_to, catalog, db_type)
 
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
         if not index_dir:
             index_dir = f"/tmp/whoosh/{catalog}"
         
-        db_path = f"{catalog}_catalog.db"
+        db_path = f"{catalog}_catalog.{db_type}"
         create_whoosh_index(db_path, index_dir, catalog, batch_size)
 
         logger.info(f"Successfully processed catalog {catalog}")
@@ -72,6 +73,7 @@ async def main() -> None:
     parser.add_argument(
         "--download",
         type=str,
+        required=False,
         default="octogen-catalog-exchange",
         help="Path where catalog files will be downloaded"
     )
@@ -92,6 +94,13 @@ async def main() -> None:
         default=False,
         help="Read catalog from local files instead of downloading from GCS"
     )
+    parser.add_argument(
+        "--db-type",
+        type=str,
+        choices=["sqlite", "duckdb"],
+        default="sqlite",
+        help="Database type to use (sqlite or duckdb)"
+    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -100,13 +109,24 @@ async def main() -> None:
             "Please see README.md for more information on how to set up the .env file."
         )
         return
-    download_path: str = args.download if not args.local else f"/tmp/octogen.extractor/{args.catalog}"
+
+    download_to: str = args.download
+    if args.local:
+        if not download_to.endswith(f"/{args.catalog}") or not download_to.endswith(f"/{args.catalog}/"):
+            download_to = os.path.join(download_to, f"{args.catalog}")
+    else:
+        octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
+            
+        if octogen_customer_name not in download_to:
+            download_to = os.path.join(download_to, octogen_customer_name, f"catalog={args.catalog}")
+
     await process_catalog(
         catalog=args.catalog,
-        download_path=download_path,
+        download_to=download_to,
         index_dir=args.index_dir,
         batch_size=args.batch_size,
-        read_from_local_files=args.local
+        read_from_local_files=args.local,
+        db_type=args.db_type
     )
 
 if __name__ == "__main__":

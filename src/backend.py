@@ -10,6 +10,8 @@ import math
 import yaml
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+import duckdb
+from typing import Union
 
 app = FastAPI()
 
@@ -17,13 +19,21 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app")
 
 # Database connection
-def get_db_connection(table_name: str):
-    db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.db")
-    if not os.path.exists(db_path):
-        raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.db not found")
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+def get_db_connection(table_name: str) -> Union[sqlite3.Connection, duckdb.DuckDBPyConnection]:
+    db_engine = os.getenv('DB_ENGINE', 'sqlite').lower()
+    
+    if db_engine == 'duckdb':
+        db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.duckdb")
+        if not os.path.exists(db_path):
+            raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.duckdb not found")
+        return duckdb.connect(db_path)
+    else:  # sqlite
+        db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.db")
+        if not os.path.exists(db_path):
+            raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.db not found")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 # Add to imports at top
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -41,13 +51,10 @@ async def get_products(table_name: str, page: int = 1, per_page: int = 12):
     cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
     total_count = cursor.fetchone()[0]
     
-    # Calculate offset
-    offset = (page - 1) * per_page
-    
     # Get paginated results
     cursor.execute(
         f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?", 
-        (per_page, offset)
+        (per_page, (page - 1) * per_page)
     )
     products = cursor.fetchall()
     conn.close()
@@ -104,19 +111,25 @@ async def search_products(table_name: str, query: str, page: int = 1, per_page: 
 
     # Get full product data from SQLite
     conn = get_db_connection(table_name)
-    cursor = conn.cursor()
-    
     placeholders = ','.join(['?' for _ in product_ids])
     
-    cursor.execute(
-        f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
-        product_ids
-    )
-    products = cursor.fetchall()
+    if isinstance(conn, duckdb.DuckDBPyConnection):
+        products = conn.execute(
+            f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
+            product_ids
+        ).fetchall()
+    else:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
+            product_ids
+        )
+        products = cursor.fetchall()
+    
     conn.close()
 
     return JSONResponse({
-        "products": [json.loads(row['extracted_product']) for row in products],
+        "products": [json.loads(row[0] if isinstance(conn, duckdb.DuckDBPyConnection) else row['extracted_product']) for row in products],
         "total": total_count,
         "page": page,
         "per_page": per_page,

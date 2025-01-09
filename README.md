@@ -32,9 +32,19 @@ uv run src/process_catalog.py --catalog heydude
 uv run src/process_catalog.py --catalog chairish
 ```
 
+You can also specify the database type:
+```bash
+uv run src/process_catalog.py --catalog anntaylor --db_type duckdb
+```
+You can also run it against local files, that may have been downloaded previously:
+```bash
+uv run src/process_catalog.py --catalog anntaylor --download /path/to/local/files --local
+```
+If you do that, make sure to set the `DB_ENGINE` environment variable to `duckdb` in your `.env` file.
+
 This will:
 1. Download the catalog to `/tmp/octogen-catalog-exchange`
-2. Create a SQLite database named `anntaylor_catalog.db`
+2. Create a SQLite database named `anntaylor_catalog.db` (or a duckdb database named `anntaylor_catalog.duckdb`)
 3. Create a Whoosh index at `/tmp/whoosh/anntaylor`
 
 You can customize any of these paths:
