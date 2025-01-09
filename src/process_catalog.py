@@ -52,7 +52,7 @@ async def process_catalog(
 
         # Step 2: Load to database
         logger.info(f"Step 2: Loading catalog {catalog} to {db_type} database")
-        load_parquet_files_to_db(download_to, catalog, db_type)
+        load_parquet_files_to_db(download_to, catalog, db_type, is_flattened)
 
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")

@@ -1,10 +1,10 @@
 import argparse
+import datetime
 import glob
 import json
 import logging
 import os
 import sqlite3
-from datetime import datetime
 
 import duckdb
 import numpy as np
@@ -47,7 +47,7 @@ def load_to_sqlite(
     conn: sqlite3.Connection,
     parquet_files: list[str],
     table_name: str,
-    is_flattened: bool,
+    is_flattened: bool = False,
 ) -> tuple[int, int]:
     """Load parquet files into SQLite database."""
     total_products = 0
@@ -65,13 +65,13 @@ def load_to_sqlite(
         )
 
         # Add unique constraint
-        cursor = conn.cursor()
-        cursor.execute(f"""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id 
-            ON {table_name} (json_extract(extracted_product, '$.productGroupID'))
-            WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
-        """)
-        conn.commit()
+        # cursor = conn.cursor()
+        # cursor.execute(f"""
+        #     CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id
+        #     ON {table_name} (json_extract(extracted_product, '$.productGroupID'))
+        #     WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
+        # """)
+        # conn.commit()
 
         # Append remaining files
         for parquet_file in parquet_files[1:]:
@@ -174,7 +174,7 @@ def load_parquet_files_to_db(
     try:
         if db_type == "sqlite":
             total_products, duplicates_skipped = load_to_sqlite(
-                conn, parquet_files, table_name
+                conn, parquet_files, table_name, is_flattened
             )
         else:  # duckdb
             total_products, duplicates_skipped = load_to_duckdb(
@@ -213,8 +213,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--is-flattened",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Whether the catalog is flattened",
     )
 
