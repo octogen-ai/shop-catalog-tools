@@ -167,7 +167,7 @@ async def get_raw_product(
     cursor = conn.cursor()
     
     cursor.execute(
-        f"SELECT extracted_product FROM {table} WHERE id = ?",
+        f"SELECT extracted_product FROM {table} WHERE product_group_id = ?",
         (product_id,)
     )
     result = cursor.fetchone()
