@@ -26,13 +26,13 @@ async def process_catalog(
     batch_size: int = 1000,
     read_from_local_files: bool = False,
     db_type: str = "sqlite",
+    is_flattened: bool = True,
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     try:
         # Step 1: Download catalog
         if read_from_local_files:
             logger.info(f"Step 1: Reading catalog {catalog} from local files")
-            is_flattened = True
         else:
             logger.info(f"Step 1: Downloading catalog {catalog}")
             octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
@@ -48,7 +48,6 @@ async def process_catalog(
                 catalog=catalog,
                 download_path=download_to,
             )
-            is_flattened = False
 
         # Step 2: Load to database
         logger.info(f"Step 2: Loading catalog {catalog} to {db_type} database")
@@ -104,6 +103,11 @@ async def main() -> None:
         default="sqlite",
         help="Database type to use (sqlite or duckdb)",
     )
+    parser.add_argument(
+        "--is-flattened",
+        action="store_true",
+        help="Whether the catalog is flattened",
+    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -134,6 +138,7 @@ async def main() -> None:
         batch_size=args.batch_size,
         read_from_local_files=args.local,
         db_type=args.db_type,
+        is_flattened=args.is_flattened,
     )
 
 
