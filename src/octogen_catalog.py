@@ -67,7 +67,7 @@ async def download_catalog(
     octogen_customer_name: str,
     catalog: str,
     download_path: str,
-    max_concurrent: int = 4, # the number of files to download concurrently
+    max_concurrent: int = 4,
 ) -> None:
     prefix = f"{octogen_customer_name}/catalog={catalog}/"
     logger.info(
@@ -78,17 +78,38 @@ async def download_catalog(
     bucket = storage_client.bucket(octogen_catalog_bucket)
     blobs = await asyncify(bucket.list_blobs)(prefix=prefix)
     
-    # Convert to list to get total count
+    # Convert to list and filter for .parquet files
     blobs = [blob for blob in blobs if blob.name.endswith(".parquet")]
-    total_size = sum(blob.size for blob in blobs)
-    logger.info(f"Found {len(blobs)} files to download. Total size: {total_size / (1024*1024):.2f} MB")
+    
+    # Filter out files that already exist with matching size
+    blobs_to_download = []
+    for blob in blobs:
+        local_path = os.path.join(download_path, blob.name)
+        if os.path.exists(local_path):
+            local_size = os.path.getsize(local_path)
+            if local_size == blob.size:
+                logger.debug(f"Skipping {blob.name} - already exists with matching size")
+                continue
+            else:
+                logger.debug(f"Re-downloading {blob.name} - size mismatch (local: {local_size}, remote: {blob.size})")
+        blobs_to_download.append(blob)
+
+    total_size = sum(blob.size for blob in blobs_to_download)
+    logger.info(
+        f"Found {len(blobs_to_download)} files to download out of {len(blobs)} total. "
+        f"Total download size: {total_size / (1024*1024):.2f} MB"
+    )
+
+    if not blobs_to_download:
+        logger.info("All files are already downloaded and up to date!")
+        return
 
     # Create a semaphore to limit concurrent downloads
     semaphore = asyncio.Semaphore(max_concurrent)
     
     # Create download tasks for each blob
     tasks = []
-    for i, blob in enumerate(blobs):
+    for i, blob in enumerate(blobs_to_download):
         task = download_blob(blob, download_path, semaphore, i)
         tasks.append(task)
     
