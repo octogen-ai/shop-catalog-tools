@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse, Response
+from dotenv import load_dotenv
 import json
 import sqlite3
 import os
@@ -20,6 +21,7 @@ app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app
 
 # Database connection
 def get_db_connection(table_name: str) -> Union[sqlite3.Connection, duckdb.DuckDBPyConnection]:
+    load_dotenv()
     db_engine = os.getenv('DB_ENGINE', 'sqlite').lower()
     
     if db_engine == 'duckdb':
@@ -27,8 +29,10 @@ def get_db_connection(table_name: str) -> Union[sqlite3.Connection, duckdb.DuckD
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.duckdb not found")
         return duckdb.connect(db_path)
-    else:  # sqlite
+    else:  # sqlite. Can either be .db or .sqlite (to be backkwards compatible.)
         db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.db")
+        if not os.path.exists(db_path):
+            db_path = os.path.join(os.path.dirname(__file__), "..", f"{table_name}_catalog.sqlite")
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail=f"Database {table_name}_catalog.db not found")
         conn = sqlite3.connect(db_path)
@@ -60,7 +64,7 @@ async def get_products(table_name: str, page: int = 1, per_page: int = 12):
     conn.close()
     
     return JSONResponse({
-        "products": [json.loads(row['extracted_product']) for row in products],
+        "products": [json.loads(row[0] if isinstance(conn, duckdb.DuckDBPyConnection) else row['extracted_product']) for row in products],
         "total": total_count,
         "page": page,
         "per_page": per_page,
@@ -113,19 +117,12 @@ async def search_products(table_name: str, query: str, page: int = 1, per_page: 
     conn = get_db_connection(table_name)
     placeholders = ','.join(['?' for _ in product_ids])
     
-    if isinstance(conn, duckdb.DuckDBPyConnection):
-        products = conn.execute(
-            f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
-            product_ids
-        ).fetchall()
-    else:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
-            product_ids
-        )
-        products = cursor.fetchall()
-    
+    cursor = conn.cursor()
+    products = cursor.execute(
+        f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
+        product_ids
+    ).fetchall()
+        
     conn.close()
 
     return JSONResponse({

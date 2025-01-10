@@ -65,13 +65,13 @@ def load_to_sqlite(
         )
 
         # Add unique constraint
-        # cursor = conn.cursor()
-        # cursor.execute(f"""
-        #     CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id
-        #     ON {table_name} (json_extract(extracted_product, '$.productGroupID'))
-        #     WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
-        # """)
-        # conn.commit()
+        cursor = conn.cursor()
+        cursor.execute(f"""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id
+            ON {table_name} (json_extract(extracted_product, '$.productGroupID'))
+            WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
+        """)
+        conn.commit()
 
         # Append remaining files
         for parquet_file in parquet_files[1:]:

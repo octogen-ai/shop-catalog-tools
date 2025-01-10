@@ -34,7 +34,7 @@ uv run src/process_catalog.py --catalog chairish
 
 You can also specify the database type:
 ```bash
-uv run src/process_catalog.py --catalog anntaylor --db_type duckdb
+uv run src/process_catalog.py --catalog anntaylor --db-type duckdb
 ```
 You can also run it against local files, that may have been downloaded previously:
 ```bash
