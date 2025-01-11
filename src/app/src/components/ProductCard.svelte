@@ -346,6 +346,37 @@
                       </div>
                     {/if}
 
+                    <!-- Additional Attributes -->
+                    {#if product.additional_attributes}
+                      <div class="mt-8 border-t border-gray-200 pt-8">
+                        <h2 class="text-sm font-medium text-gray-900">Additional Details</h2>
+                        <div class="mt-4">
+                          <dl class="divide-y divide-gray-100">
+                            {#each Object.entries(product.additional_attributes) as [key, value]}
+                              {#if value !== null}
+                                <div class="px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
+                                  <dt class="text-sm font-medium text-gray-900 capitalize">{key}</dt>
+                                  <dd class="mt-1 text-sm text-gray-500 sm:col-span-2 sm:mt-0">
+                                    {#if typeof value === 'object' && value.text}
+                                      <ul class="list-disc pl-5">
+                                        {#each value.text as item}
+                                          <li>{item}</li>
+                                        {/each}
+                                      </ul>
+                                    {:else if typeof value === 'object'}
+                                      {JSON.stringify(value)}
+                                    {:else}
+                                      {value}
+                                    {/if}
+                                  </dd>
+                                </div>
+                              {/if}
+                            {/each}
+                          </dl>
+                        </div>
+                      </div>
+                    {/if}
+
                     <!-- Customer Reviews -->
                     {#if product.review && product.review.length > 0}
                       <div class="mt-8 border-t border-gray-200 pt-8">
