@@ -33,13 +33,41 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 def create_nested_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create a nested DataFrame with standardized columns regardless of input format.
+    Handles both flattened and non-flattened data.
+    """
     new_df = pd.DataFrame()
-    new_df["extracted_product"] = df.apply(lambda x: x.to_dict(), axis=1)
-    new_df["catalog"] = df["catalog"]
-    new_df["product_group_id"] = df["productGroupID"]
-    new_df["extracted_product"] = new_df["extracted_product"].apply(
-        lambda x: json.dumps(x, cls=NumpyEncoder)
-    )
+    flattened = is_data_flattened(df)
+    
+    if flattened:
+        logger.info("Processing flattened data")
+        # For flattened data, we need to create the extracted_product from all columns
+        new_df["extracted_product"] = df.apply(
+            lambda x: json.dumps(x.to_dict(), cls=NumpyEncoder), 
+            axis=1
+        )
+        new_df["catalog"] = df["catalog"]
+        new_df["product_group_id"] = df["productGroupID"]
+    else:
+        logger.info("Processing non-flattened data")
+        # For non-flattened data, we already have extracted_product
+        new_df["extracted_product"] = df["extracted_product"].apply(
+            lambda x: x if isinstance(x, str) else json.dumps(x, cls=NumpyEncoder)
+        )
+        new_df["catalog"] = df["catalog"]
+        new_df["product_group_id"] = df["product_group_id"]
+    
+    # Verify all values are strings before returning
+    if not new_df["extracted_product"].apply(lambda x: isinstance(x, str)).all():
+        logger.error("Some extracted_product values are not strings!")
+        non_string_samples = new_df[~new_df["extracted_product"].apply(lambda x: isinstance(x, str))]["extracted_product"].head()
+        logger.error(f"Non-string samples: {non_string_samples}")
+        # Force conversion to string
+        new_df["extracted_product"] = new_df["extracted_product"].apply(
+            lambda x: json.dumps(x, cls=NumpyEncoder) if not isinstance(x, str) else x
+        )
+    
     return new_df
 
 
@@ -245,7 +273,6 @@ def load_parquet_files_to_db(
     download_path: str,
     catalog: str,
     db_type: str = "sqlite",
-    is_flattened: bool = False,
 ) -> None:
     """Load all parquet files from the download path into a SQLite or DuckDB database."""
     db_path = os.path.join(
@@ -257,7 +284,6 @@ def load_parquet_files_to_db(
     if db_type == "sqlite":
         conn = sqlite3.connect(db_path)
     else:  # duckdb
-        # Explicitly disable encryption
         conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
 
     table_name = os.path.splitext(catalog)[0].replace(os.sep, "_")
@@ -266,6 +292,12 @@ def load_parquet_files_to_db(
     )
 
     try:
+        # Read first file to determine if data is flattened
+        if parquet_files:
+            first_df = pd.read_parquet(parquet_files[0])
+            is_flattened = is_data_flattened(first_df)
+            logger.info(f"Detected {'flattened' if is_flattened else 'nested'} data format")
+
         if db_type == "sqlite":
             total_products, duplicates_skipped = load_to_sqlite(
                 conn, parquet_files, table_name, is_flattened
@@ -305,11 +337,6 @@ def main() -> None:
         default="sqlite",
         help="Database type to use (sqlite or duckdb)",
     )
-    parser.add_argument(
-        "--is-flattened",
-        action="store_true",
-        help="Whether the catalog is flattened",
-    )
 
     args = parser.parse_args()
 
@@ -323,9 +350,25 @@ def main() -> None:
         )
         return
 
-    load_parquet_files_to_db(
-        args.download, args.catalog, args.db_type, args.is_flattened
-    )
+    load_parquet_files_to_db(args.download, args.catalog, args.db_type)
+
+
+def is_data_flattened(df: pd.DataFrame) -> bool:
+    """
+    Determine if a DataFrame contains flattened data by examining its structure.
+    
+    Returns:
+        bool: True if data appears to be flattened, False otherwise
+    """
+    # Print columns for debugging
+    if 'extracted_product' in df.columns:
+        # If it has extracted_product column, it's NOT flattened
+        # logger.info("Found extracted_product column, data is NOT flattened")
+        return False
+    
+    # If no extracted_product column, it IS flattened
+    # logger.info("No extracted_product column found, data IS flattened")
+    return True
 
 
 if __name__ == "__main__":

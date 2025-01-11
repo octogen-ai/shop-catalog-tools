@@ -26,7 +26,6 @@ async def process_catalog(
     batch_size: int = 1000,
     read_from_local_files: bool = False,
     db_type: str = "sqlite",
-    is_flattened: bool = True,
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     try:
@@ -51,7 +50,7 @@ async def process_catalog(
 
         # Step 2: Load to database
         logger.info(f"Step 2: Loading catalog {catalog} to {db_type} database")
-        load_parquet_files_to_db(download_to, catalog, db_type, is_flattened)
+        load_parquet_files_to_db(download_to, catalog, db_type)
 
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
@@ -103,11 +102,6 @@ async def main() -> None:
         default="sqlite",
         help="Database type to use (sqlite or duckdb)",
     )
-    parser.add_argument(
-        "--is-flattened",
-        action="store_true",
-        help="Whether the catalog is flattened",
-    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -138,7 +132,6 @@ async def main() -> None:
         batch_size=args.batch_size,
         read_from_local_files=args.local,
         db_type=args.db_type,
-        is_flattened=args.is_flattened,
     )
 
 
