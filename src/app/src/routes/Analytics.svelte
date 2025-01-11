@@ -35,6 +35,7 @@
             }
         } catch (e) {
             error = 'Failed to load analytics';
+            console.error(e);
         } finally {
             loading = false;
         }
@@ -59,23 +60,24 @@
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
                 {error}
             </div>
-        {:else}
+        {:else if basicAnalytics}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <AnalyticsCard 
                     title="Total Products" 
-                    value={basicAnalytics.total_records} 
+                    value={basicAnalytics?.total_records} 
                     type="number" 
                 />
                 
                 <AnalyticsCard 
                     title="Unique Brands" 
-                    value={basicAnalytics.uniqueness_analysis.brand_name.unique_values} 
+                    value={basicAnalytics?.uniqueness_analysis?.brand_name?.unique_values} 
                     type="number" 
                 />
                 
                 <AnalyticsCard 
                     title="Data Completeness" 
-                    value={100 - basicAnalytics.null_analysis.description.null_percentage} 
+                    value={basicAnalytics?.null_analysis?.description?.null_percentage ? 
+                        100 - basicAnalytics.null_analysis.description.null_percentage : 0} 
                     type="percentage" 
                 />
             </div>
@@ -92,15 +94,17 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {#each Object.entries(basicAnalytics.null_analysis) as [field, analysis]}
-                                <tr class="border-t">
-                                    <td class="px-6 py-4">{field}</td>
-                                    <td class="px-6 py-4">{analysis.null_percentage}%</td>
-                                    <td class="px-6 py-4">
-                                        {basicAnalytics.uniqueness_analysis[field].unique_values}
-                                    </td>
-                                </tr>
-                            {/each}
+                            {#if basicAnalytics?.null_analysis && basicAnalytics?.uniqueness_analysis}
+                                {#each Object.entries(basicAnalytics.null_analysis) as [field, analysis]}
+                                    <tr class="border-t">
+                                        <td class="px-6 py-4">{field}</td>
+                                        <td class="px-6 py-4">{analysis.null_percentage}%</td>
+                                        <td class="px-6 py-4">
+                                            {basicAnalytics.uniqueness_analysis[field]?.unique_values ?? 'N/A'}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            {/if}
                         </tbody>
                     </table>
                 </div>
@@ -123,13 +127,15 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {#each advancedAnalytics.variant_analysis.distribution as variant}
-                                        <tr class="border-t">
-                                            <td class="px-4 py-2">{variant.variant_count}</td>
-                                            <td class="px-4 py-2">{variant.product_count}</td>
-                                            <td class="px-4 py-2">{variant.percentage}%</td>
-                                        </tr>
-                                    {/each}
+                                    {#if advancedAnalytics?.variant_analysis?.distribution}
+                                        {#each advancedAnalytics.variant_analysis.distribution as variant}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{variant.variant_count}</td>
+                                                <td class="px-4 py-2">{variant.product_count}</td>
+                                                <td class="px-4 py-2">{variant.percentage}%</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
                                 </tbody>
                             </table>
                         </div>
@@ -139,62 +145,155 @@
                             <h3 class="text-lg font-medium mb-3">Price Distribution</h3>
                             <table class="min-w-full">
                                 <tbody>
-                                    {#each Object.entries(advancedAnalytics.price_distribution.statistics) as [metric, value]}
-                                        <tr class="border-t">
-                                            <td class="px-4 py-2 font-medium">{metric}</td>
-                                            <td class="px-4 py-2">${value}</td>
-                                        </tr>
-                                    {/each}
+                                    {#if advancedAnalytics?.price_distribution?.statistics}
+                                        {#each Object.entries(advancedAnalytics.price_distribution.statistics) as [metric, value]}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2 font-medium">{metric}</td>
+                                                <td class="px-4 py-2">${value}</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- Color Combinations -->
+                    <!-- Discount Analysis -->
                     <div class="mt-8">
-                        <h3 class="text-lg font-medium mb-3">Popular Color Combinations</h3>
-                        <div class="overflow-x-auto">
+                        <h3 class="text-lg font-medium mb-3">Discount Analysis</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <table class="min-w-full">
                                 <thead>
                                     <tr class="bg-gray-50">
-                                        <th class="px-4 py-2 text-left">Color</th>
-                                        <th class="px-4 py-2 text-left">Color Families</th>
-                                        <th class="px-4 py-2 text-left">Frequency</th>
+                                        <th class="px-4 py-2 text-left">Discount Range</th>
+                                        <th class="px-4 py-2 text-left">Product Count</th>
+                                        <th class="px-4 py-2 text-left">Avg Rating</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {#each advancedAnalytics.color_combinations.popular_combinations as combo}
-                                        <tr class="border-t">
-                                            <td class="px-4 py-2">{combo.color}</td>
-                                            <td class="px-4 py-2">{combo.color_families}</td>
-                                            <td class="px-4 py-2">{combo.frequency}</td>
-                                        </tr>
-                                    {/each}
+                                    {#if advancedAnalytics?.discount_analysis?.ranges}
+                                        {#each advancedAnalytics.discount_analysis.ranges as range}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{range.discount_range}</td>
+                                                <td class="px-4 py-2">{range.product_count}</td>
+                                                <td class="px-4 py-2">{range.avg_rating || 'N/A'}</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- Size Availability -->
+                    <!-- Rating Analysis -->
                     <div class="mt-8">
-                        <h3 class="text-lg font-medium mb-3">Size Availability</h3>
+                        <h3 class="text-lg font-medium mb-3">Rating Analysis</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-4 py-2 text-left">Metric</th>
+                                        <th class="px-4 py-2 text-left">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#if advancedAnalytics?.rating_analysis?.statistics}
+                                        {#each Object.entries(advancedAnalytics.rating_analysis.statistics) as [metric, value]}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{metric.replace(/_/g, ' ')}</td>
+                                                <td class="px-4 py-2">
+                                                    {metric.includes('correlation') ? `${value} correlation` : value}
+                                                </td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Material Analysis -->
+                    <div class="mt-8">
+                        <h3 class="text-lg font-medium mb-3">Material Analysis</h3>
                         <div class="overflow-x-auto">
                             <table class="min-w-full">
                                 <thead>
                                     <tr class="bg-gray-50">
-                                        <th class="px-4 py-2 text-left">Size</th>
-                                        <th class="px-4 py-2 text-left">Total Count</th>
-                                        <th class="px-4 py-2 text-left">In Stock</th>
+                                        <th class="px-4 py-2 text-left">Material</th>
+                                        <th class="px-4 py-2 text-left">Count</th>
+                                        <th class="px-4 py-2 text-left">Avg Price</th>
+                                        <th class="px-4 py-2 text-left">Top Brands</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {#each advancedAnalytics.size_availability.distribution as size}
-                                        <tr class="border-t">
-                                            <td class="px-4 py-2">{size.size}</td>
-                                            <td class="px-4 py-2">{size.total_count}</td>
-                                            <td class="px-4 py-2">{size.in_stock_count}</td>
-                                        </tr>
-                                    {/each}
+                                    {#if advancedAnalytics?.material_analysis?.popular_materials}
+                                        {#each advancedAnalytics.material_analysis.popular_materials as material}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{material.name}</td>
+                                                <td class="px-4 py-2">{material.count}</td>
+                                                <td class="px-4 py-2">${material.avg_price}</td>
+                                                <td class="px-4 py-2">{material.top_brands.join(', ')}</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Brand Analysis -->
+                    <div class="mt-8">
+                        <h3 class="text-lg font-medium mb-3">Top Brands Analysis</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-4 py-2 text-left">Brand</th>
+                                        <th class="px-4 py-2 text-left">Products</th>
+                                        <th class="px-4 py-2 text-left">Price Range</th>
+                                        <th class="px-4 py-2 text-left">Avg Rating</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#if advancedAnalytics?.brand_analysis?.top_brands}
+                                        {#each advancedAnalytics.brand_analysis.top_brands as brand}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{brand.name}</td>
+                                                <td class="px-4 py-2">{brand.product_count}</td>
+                                                <td class="px-4 py-2">${brand.price_range.min} - ${brand.price_range.max}</td>
+                                                <td class="px-4 py-2">{brand.avg_rating || 'N/A'}</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Audience Analysis -->
+                    <div class="mt-8">
+                        <h3 class="text-lg font-medium mb-3">Audience Demographics</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-4 py-2 text-left">Gender</th>
+                                        <th class="px-4 py-2 text-left">Age Group</th>
+                                        <th class="px-4 py-2 text-left">Product Count</th>
+                                        <th class="px-4 py-2 text-left">Avg Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#if advancedAnalytics?.audience_analysis?.demographics}
+                                        {#each advancedAnalytics.audience_analysis.demographics as demo}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2">{demo.gender}</td>
+                                                <td class="px-4 py-2">{demo.age_group}</td>
+                                                <td class="px-4 py-2">{demo.product_count}</td>
+                                                <td class="px-4 py-2">${demo.avg_price}</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
                                 </tbody>
                             </table>
                         </div>
