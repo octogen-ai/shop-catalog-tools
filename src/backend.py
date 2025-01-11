@@ -51,15 +51,19 @@ async def get_products(table_name: str, page: int = 1, per_page: int = 12):
     conn = get_db_connection(table_name)
     cursor = conn.cursor()
     
-    # Get total count
-    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+    # Get total count of valid products (excluding null IDs)
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {table_name} 
+        WHERE json_extract(extracted_product, '$.id') IS NOT NULL
+    """)
     total_count = cursor.fetchone()[0]
     
-    # Get paginated results
-    cursor.execute(
-        f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?", 
-        (per_page, (page - 1) * per_page)
-    )
+    # Get paginated results, excluding products with null IDs
+    cursor.execute(f"""
+        SELECT extracted_product FROM {table_name}
+        WHERE json_extract(extracted_product, '$.id') IS NOT NULL
+        LIMIT ? OFFSET ?
+    """, (per_page, (page - 1) * per_page))
     products = cursor.fetchall()
     conn.close()
     
