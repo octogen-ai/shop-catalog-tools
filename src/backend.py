@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import duckdb
 from typing import Union
+from collections import Counter
 
 app = FastAPI()
 
@@ -202,3 +203,195 @@ async def get_raw_product(
         "product_view.html",
         template_context
     )
+
+@app.get("/api/{table_name}/analytics")
+async def get_table_analytics(table_name: str):
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+    
+    # Get total number of records
+    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+    total_records = cursor.fetchone()[0]
+    
+    # Analysis queries for common fields
+    analytics = {
+        "total_records": total_records,
+        "null_analysis": {},
+        "uniqueness_analysis": {},
+        "value_distributions": {}
+    }
+    
+    # Common fields to analyze
+    fields_to_check = [
+        "id", "name", "description", "brand_name", "price", 
+        "currency", "availability", "url", "image_url"
+    ]
+    
+    # Null analysis
+    for field in fields_to_check:
+        cursor.execute(f"""
+            SELECT COUNT(*) 
+            FROM {table_name} 
+            WHERE json_extract(extracted_product, '$.{field}') IS NULL
+        """)
+        null_count = cursor.fetchone()[0]
+        analytics["null_analysis"][field] = {
+            "null_count": null_count,
+            "null_percentage": round((null_count / total_records) * 100, 2)
+        }
+    
+    # Uniqueness analysis
+    for field in fields_to_check:
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT json_extract(extracted_product, '$.{field}'))
+            FROM {table_name}
+            WHERE json_extract(extracted_product, '$.{field}') IS NOT NULL
+        """)
+        unique_count = cursor.fetchone()[0]
+        analytics["uniqueness_analysis"][field] = {
+            "unique_values": unique_count,
+            "uniqueness_percentage": round((unique_count / total_records) * 100, 2)
+        }
+    
+    # Value distribution for categorical fields
+    categorical_fields = ["brand_name", "availability", "currency"]
+    for field in categorical_fields:
+        cursor.execute(f"""
+            SELECT json_extract(extracted_product, '$.{field}') as value, COUNT(*) as count
+            FROM {table_name}
+            WHERE json_extract(extracted_product, '$.{field}') IS NOT NULL
+            GROUP BY json_extract(extracted_product, '$.{field}')
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        distribution = cursor.fetchall()
+        analytics["value_distributions"][field] = [
+            {"value": row[0], "count": row[1]} 
+            for row in distribution
+        ]
+    
+    conn.close()
+    return JSONResponse(analytics)
+
+@app.get("/api/{table_name}/advanced-analytics")
+async def get_advanced_analytics(table_name: str):
+    conn = get_db_connection(table_name)
+    
+    # Check if connection is DuckDB
+    if not isinstance(conn, duckdb.DuckDBPyConnection):
+        raise HTTPException(
+            status_code=400, 
+            detail="Advanced analytics are only available with DuckDB database engine"
+        )
+    
+    cursor = conn.cursor()
+    analytics = {
+        "variant_analysis": {},
+        "price_distribution": {},
+        "size_availability": {},
+        "color_combinations": {}
+    }
+    
+    # 1. Variant Analysis - Count of variants per product and distribution
+    cursor.execute(f"""
+        SELECT 
+            json_array_length(json_extract(extracted_product, '$.hasVariant')) as variant_count,
+            COUNT(*) as product_count,
+            (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM {table_name})) as percentage
+        FROM {table_name}
+        WHERE json_extract(extracted_product, '$.hasVariant') IS NOT NULL
+        GROUP BY variant_count
+        ORDER BY variant_count
+    """)
+    analytics["variant_analysis"]["distribution"] = [
+        {"variant_count": row[0], "product_count": row[1], "percentage": round(row[2], 2)}
+        for row in cursor.fetchall()
+    ]
+    
+    # 2. Price Distribution with Statistical Analysis
+    cursor.execute(f"""
+        WITH price_data AS (
+            SELECT 
+                json_extract(extracted_product, '$.price_info.price')::FLOAT as price
+            FROM {table_name}
+            WHERE json_extract(extracted_product, '$.price_info.price') IS NOT NULL
+        )
+        SELECT 
+            MIN(price) as min_price,
+            MAX(price) as max_price,
+            AVG(price) as avg_price,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
+            STDDEV(price) as std_dev,
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price) as q1,
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price) as q3
+        FROM price_data
+    """)
+    row = cursor.fetchone()
+    analytics["price_distribution"]["statistics"] = {
+        "min_price": round(row[0], 2),
+        "max_price": round(row[1], 2),
+        "avg_price": round(row[2], 2),
+        "median_price": round(row[3], 2),
+        "std_dev": round(row[4], 2),
+        "q1": round(row[5], 2),
+        "q3": round(row[6], 2)
+    }
+    
+    # 3. Size Availability Analysis
+    cursor.execute(f"""
+        WITH RECURSIVE size_data AS (
+            SELECT 
+                unnest(json_extract(extracted_product, '$.sizes')::JSON[]) as size,
+                json_extract(extracted_product, '$.availability')::VARCHAR as availability
+            FROM {table_name}
+            WHERE json_extract(extracted_product, '$.sizes') IS NOT NULL
+        )
+        SELECT 
+            size,
+            COUNT(*) as total_count,
+            SUM(CASE WHEN availability = 'IN_STOCK' THEN 1 ELSE 0 END) as in_stock_count,
+            SUM(CASE WHEN availability = 'OUT_OF_STOCK' THEN 1 ELSE 0 END) as out_of_stock_count
+        FROM size_data
+        GROUP BY size
+        ORDER BY total_count DESC
+        LIMIT 20
+    """)
+    analytics["size_availability"]["distribution"] = [
+        {
+            "size": row[0],
+            "total_count": row[1],
+            "in_stock_count": row[2],
+            "out_of_stock_count": row[3]
+        }
+        for row in cursor.fetchall()
+    ]
+    
+    # 4. Color Combinations Analysis
+    cursor.execute(f"""
+        WITH RECURSIVE color_data AS (
+            SELECT 
+                unnest(json_extract(extracted_product, '$.color_info.colors')::JSON[]) as color,
+                json_extract(extracted_product, '$.color_info.color_families')::JSON[] as families
+            FROM {table_name}
+            WHERE json_extract(extracted_product, '$.color_info.colors') IS NOT NULL
+        )
+        SELECT 
+            color,
+            array_to_string(families, ', ') as color_families,
+            COUNT(*) as frequency
+        FROM color_data
+        GROUP BY color, families
+        ORDER BY frequency DESC
+        LIMIT 20
+    """)
+    analytics["color_combinations"]["popular_combinations"] = [
+        {
+            "color": row[0],
+            "color_families": row[1],
+            "frequency": row[2]
+        }
+        for row in cursor.fetchall()
+    ]
+    
+    conn.close()
+    return JSONResponse(analytics)
