@@ -127,8 +127,8 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {#if advancedAnalytics?.variant_analysis?.distribution}
-                                        {#each advancedAnalytics.variant_analysis.distribution as variant}
+                                    {#if advancedAnalytics?.variant_analysis?.variants}
+                                        {#each advancedAnalytics.variant_analysis.variants as variant}
                                             <tr class="border-t">
                                                 <td class="px-4 py-2">{variant.variant_count}</td>
                                                 <td class="px-4 py-2">{variant.product_count}</td>
@@ -142,14 +142,20 @@
 
                         <!-- Price Distribution -->
                         <div>
-                            <h3 class="text-lg font-medium mb-3">Price Distribution</h3>
+                            <h3 class="text-lg font-medium mb-3">Variant Statistics</h3>
                             <table class="min-w-full">
                                 <tbody>
-                                    {#if advancedAnalytics?.price_distribution?.statistics}
-                                        {#each Object.entries(advancedAnalytics.price_distribution.statistics) as [metric, value]}
+                                    {#if advancedAnalytics?.variant_analysis?.statistics}
+                                        {#each Object.entries(advancedAnalytics.variant_analysis.statistics) as [metric, value]}
                                             <tr class="border-t">
-                                                <td class="px-4 py-2 font-medium">{metric}</td>
-                                                <td class="px-4 py-2">${value}</td>
+                                                <td class="px-4 py-2 font-medium">{metric.replace(/_/g, ' ')}</td>
+                                                <td class="px-4 py-2">
+                                                    {metric.includes('correlation') ? 
+                                                        `${value} correlation` : 
+                                                        metric.includes('total') ? 
+                                                            value : 
+                                                            value?.toFixed(2) ?? 'N/A'}
+                                                </td>
                                             </tr>
                                         {/each}
                                     {/if}

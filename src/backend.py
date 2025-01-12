@@ -211,7 +211,7 @@ async def get_table_analytics(table_name: str):
     
     # Get total number of records
     cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-    total_records = cursor.fetchone()[0]
+    total_records = cursor.fetchone()[0] or 0  # Default to 0 if None
     
     # Analysis queries for common fields
     analytics = {
@@ -221,55 +221,100 @@ async def get_table_analytics(table_name: str):
         "value_distributions": {}
     }
     
-    # Common fields to analyze
+    # Common fields to analyze based on schema
     fields_to_check = [
-        "id", "name", "description", "brand_name", "price", 
-        "currency", "availability", "url", "image_url"
+        # Basic product info
+        'id', 'catalog', 'url', 'name', 'type', 'primary_product_id', 'description', 'gtin',
+        
+        # Price and availability
+        'price_info.price', 'price_info.original_price', 'price_info.currency_code', 'availability',
+        'available_quantity',
+        
+        # Product details
+        'brand.name', 'language_code', 'color_info.colors', 'sizes', 'materials', 'fit', 
+        'dimensions', 'patterns',
+        
+        # Media
+        'image.url', 'images', 'three_d_model',
+        
+        # Ratings and reviews
+        'rating.average_rating', 'rating.rating_count', 'review',
+        
+        # Variant info
+        'productGroupID', 'variesBy', 'hasVariant',
+        
+        # Additional info
+        'additional_attributes', 'tags', 'promotions', 'audience', 'fulfillment_info'
     ]
-    
-    # Null analysis
+
+    # Modify the null analysis query to handle nested fields
     for field in fields_to_check:
-        cursor.execute(f"""
-            SELECT COUNT(*) 
-            FROM {table_name} 
-            WHERE json_extract(extracted_product, '$.{field}') IS NULL
-        """)
-        null_count = cursor.fetchone()[0]
-        analytics["null_analysis"][field] = {
-            "null_count": null_count,
-            "null_percentage": round((null_count / total_records) * 100, 2)
-        }
-    
-    # Uniqueness analysis
+        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
+        try:
+            cursor.execute(f"""
+                SELECT COUNT(*) 
+                FROM {table_name} 
+                WHERE json_extract(extracted_product, '{json_path}') IS NULL
+            """)
+            null_count = cursor.fetchone()[0] or 0  # Default to 0 if None
+            analytics["null_analysis"][field] = {
+                "null_count": null_count,
+                "null_percentage": round((null_count / total_records) * 100, 2) if total_records > 0 else 0
+            }
+        except Exception as e:
+            analytics["null_analysis"][field] = {
+                "null_count": 0,
+                "null_percentage": 0
+            }
+
+    # Modify the uniqueness analysis to handle nested fields
     for field in fields_to_check:
-        cursor.execute(f"""
-            SELECT COUNT(DISTINCT json_extract(extracted_product, '$.{field}'))
-            FROM {table_name}
-            WHERE json_extract(extracted_product, '$.{field}') IS NOT NULL
-        """)
-        unique_count = cursor.fetchone()[0]
-        analytics["uniqueness_analysis"][field] = {
-            "unique_values": unique_count,
-            "uniqueness_percentage": round((unique_count / total_records) * 100, 2)
-        }
-    
-    # Value distribution for categorical fields
-    categorical_fields = ["brand_name", "availability", "currency"]
+        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
+        try:
+            cursor.execute(f"""
+                SELECT COUNT(DISTINCT json_extract(extracted_product, '{json_path}'))
+                FROM {table_name}
+                WHERE json_extract(extracted_product, '{json_path}') IS NOT NULL
+            """)
+            unique_count = cursor.fetchone()[0] or 0  # Default to 0 if None
+            analytics["uniqueness_analysis"][field] = {
+                "unique_values": unique_count,
+                "uniqueness_percentage": round((unique_count / total_records) * 100, 2) if total_records > 0 else 0
+            }
+        except Exception as e:
+            analytics["uniqueness_analysis"][field] = {
+                "unique_values": 0,
+                "uniqueness_percentage": 0
+            }
+
+    # Modify categorical fields analysis
+    categorical_fields = [
+        'brand.name', 'availability', 'price_info.currency_code', 
+        'language_code', 'color_info.colors', 'materials', 'patterns',
+        'type', 'audience'
+    ]
+
     for field in categorical_fields:
-        cursor.execute(f"""
-            SELECT json_extract(extracted_product, '$.{field}') as value, COUNT(*) as count
-            FROM {table_name}
-            WHERE json_extract(extracted_product, '$.{field}') IS NOT NULL
-            GROUP BY json_extract(extracted_product, '$.{field}')
-            ORDER BY count DESC
-            LIMIT 10
-        """)
-        distribution = cursor.fetchall()
-        analytics["value_distributions"][field] = [
-            {"value": row[0], "count": row[1]} 
-            for row in distribution
-        ]
-    
+        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
+        try:
+            cursor.execute(f"""
+                SELECT 
+                    COALESCE(json_extract(extracted_product, '{json_path}'), 'null') as value,
+                    COUNT(*) as count
+                FROM {table_name}
+                WHERE json_extract(extracted_product, '{json_path}') IS NOT NULL
+                GROUP BY json_extract(extracted_product, '{json_path}')
+                ORDER BY count DESC
+                LIMIT 10
+            """)
+            distribution = cursor.fetchall()
+            analytics["value_distributions"][field] = [
+                {"value": str(row[0]) if row[0] is not None else "null", "count": row[1] or 0} 
+                for row in distribution
+            ] if distribution else []
+        except Exception as e:
+            analytics["value_distributions"][field] = []
+
     conn.close()
     return JSONResponse(analytics)
 
@@ -463,6 +508,78 @@ async def get_advanced_analytics(table_name: str):
         }
         for row in cursor.fetchall()
     ]
+
+    # Variant Analysis
+    cursor.execute(f"""
+        WITH variant_data AS (
+            SELECT 
+                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
+                json_extract_string(extracted_product, '$.price_info.price') as price
+            FROM {table_name}
+            WHERE json_extract_string(extracted_product, '$.hasVariant') IS NOT NULL
+                AND json_extract_string(extracted_product, '$.hasVariant') != '[]'
+        ),
+        variant_counts AS (
+            SELECT 
+                CASE 
+                    WHEN variants_json IS NULL OR variants_json = '[]' THEN 0
+                    ELSE json_array_length(variants_json)
+                END as variant_count,
+                CAST(price AS FLOAT) as product_price
+            FROM variant_data
+        )
+        SELECT 
+            variant_count,
+            COUNT(*) as product_count,
+            (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM variant_counts))::FLOAT as percentage
+        FROM variant_counts
+        GROUP BY variant_count
+        ORDER BY variant_count
+    """)
+    analytics["variant_analysis"]["variants"] = [
+        {
+            "variant_count": row[0],
+            "product_count": row[1],
+            "percentage": round(row[2], 2)
+        }
+        for row in cursor.fetchall()
+    ]
+
+    # Additional variant statistics
+    cursor.execute(f"""
+        WITH variant_data AS (
+            SELECT 
+                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
+                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price
+            FROM {table_name}
+            WHERE json_extract_string(extracted_product, '$.hasVariant') IS NOT NULL
+                AND json_extract_string(extracted_product, '$.hasVariant') != '[]'
+                AND json_extract_string(extracted_product, '$.price_info.price') IS NOT NULL
+        ),
+        variant_stats AS (
+            SELECT 
+                CASE 
+                    WHEN variants_json IS NULL OR variants_json = '[]' THEN 0
+                    ELSE json_array_length(variants_json)
+                END as variant_count,
+                price
+            FROM variant_data
+        )
+        SELECT
+            AVG(variant_count) as avg_variants,
+            MAX(variant_count) as max_variants,
+            CORR(variant_count, price) as price_variant_correlation,
+            COUNT(*) as total_products_with_variants
+        FROM variant_stats
+        WHERE variant_count > 0
+    """)
+    row = cursor.fetchone()
+    analytics["variant_analysis"]["statistics"] = {
+        "average_variants": round(row[0], 2) if row[0] is not None else None,
+        "max_variants": row[1],
+        "price_variant_correlation": round(row[2], 2) if row[2] is not None else None,
+        "total_products_with_variants": row[3]
+    }
 
     conn.close()
     return JSONResponse(analytics)
