@@ -1,0 +1,1363 @@
+{
+  "$defs": {
+    "AggregateOffer": {
+      "description": "Schema.org AggregateOffer model.",
+      "properties": {
+        "@type": {
+          "default": "AggregateOffer",
+          "title": "@Type",
+          "type": "string"
+        },
+        "offerCount": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Number of offers.",
+          "title": "Offercount"
+        },
+        "highPrice": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "default": null,
+          "description": "Highest price of the offers.",
+          "title": "Highprice"
+        },
+        "lowPrice": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "default": null,
+          "description": "Lowest price of the offers.",
+          "title": "Lowprice"
+        },
+        "priceCurrency": {
+          "description": "Currency of the offers.",
+          "title": "Pricecurrency",
+          "type": "string"
+        },
+        "itemCondition": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Condition of the items.",
+          "title": "Itemcondition"
+        },
+        "seller": {
+          "anyOf": [{ "$ref": "#/$defs/Organization" }, { "type": "null" }],
+          "default": null,
+          "description": "Seller organization."
+        },
+        "offers": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Offer" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "List of individual offers.",
+          "title": "Offers"
+        }
+      },
+      "required": ["priceCurrency"],
+      "title": "AggregateOffer",
+      "type": "object"
+    },
+    "Audience": {
+      "properties": {
+        "genders": {
+          "description": "The genders of the audience. Suggested values: 'male', 'female', 'unisex'. Maximum 5 values.",
+          "items": { "type": "string" },
+          "maxItems": 5,
+          "title": "Genders",
+          "type": "array"
+        },
+        "age_groups": {
+          "description": "The age groups of the audience. Suggested values: 'newborn', 'infant', 'toddler', 'kids', 'adult'. Maximum 5 values.",
+          "items": { "type": "string" },
+          "maxItems": 5,
+          "title": "Age Groups",
+          "type": "array"
+        }
+      },
+      "required": ["genders", "age_groups"],
+      "title": "Audience",
+      "type": "object"
+    },
+    "AvailabilityEnum": {
+      "enum": [
+        "AVAILABILITY_UNSPECIFIED",
+        "IN_STOCK",
+        "OUT_OF_STOCK",
+        "PREORDER",
+        "BACKORDER"
+      ],
+      "title": "AvailabilityEnum",
+      "type": "string"
+    },
+    "Brand": {
+      "description": "Schema.org Brand definition.",
+      "properties": {
+        "@type": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "Brand",
+          "title": "@Type"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "description": "The name of the brand.",
+          "title": "Name"
+        },
+        "logo": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "URL of the brand's logo.",
+          "title": "Logo"
+        },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The brand's official website.",
+          "title": "Url"
+        },
+        "description": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Description of the brand.",
+          "title": "Description"
+        },
+        "sameAs": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "URLs to external references for the brand.",
+          "title": "Sameas"
+        }
+      },
+      "required": ["name"],
+      "title": "Brand",
+      "type": "object"
+    },
+    "BreadcrumbItem": {
+      "properties": {
+        "type_": { "pattern": "ListItem", "title": "Type", "type": "string" },
+        "position": { "title": "Position", "type": "integer" },
+        "item": { "$ref": "#/$defs/Item" }
+      },
+      "required": ["type_", "position", "item"],
+      "title": "BreadcrumbItem",
+      "type": "object"
+    },
+    "BreadcrumbList": {
+      "properties": {
+        "context": { "$ref": "#/$defs/ContextEnum" },
+        "type_": {
+          "pattern": "BreadcrumbList",
+          "title": "Type",
+          "type": "string"
+        },
+        "itemListElement": {
+          "items": { "$ref": "#/$defs/BreadcrumbItem" },
+          "title": "Itemlistelement",
+          "type": "array"
+        }
+      },
+      "required": ["context", "type_", "itemListElement"],
+      "title": "BreadcrumbList",
+      "type": "object"
+    },
+    "Category": {
+      "properties": {
+        "name": { "title": "Name", "type": "string" },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": ["name"],
+      "title": "Category",
+      "type": "object"
+    },
+    "ColorInfo": {
+      "properties": {
+        "color_families": {
+          "anyOf": [
+            { "items": { "type": "string" }, "maxItems": 10, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Standard color families, such as 'Red', 'Green', 'Blue'. Maximum 5 values.",
+          "title": "Color Families"
+        },
+        "colors": {
+          "anyOf": [
+            { "items": { "type": "string" }, "maxItems": 75, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": [],
+          "description": "Color display names, which may differ from standard color family names. Maximum 75 values.",
+          "title": "Colors"
+        }
+      },
+      "title": "ColorInfo",
+      "type": "object"
+    },
+    "ContactPoint": {
+      "description": "Schema.org model for ContactPoint.",
+      "properties": {
+        "type": {
+          "default": "ContactPoint",
+          "title": "Type",
+          "type": "string"
+        },
+        "telephone": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Telephone"
+        },
+        "email": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Email"
+        },
+        "contactType": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "customer service",
+          "title": "Contacttype"
+        },
+        "address": {
+          "anyOf": [{ "$ref": "#/$defs/PostalAddress" }, { "type": "null" }]
+        }
+      },
+      "required": ["telephone", "email", "address"],
+      "title": "ContactPoint",
+      "type": "object"
+    },
+    "ContextEnum": {
+      "enum": [
+        "https://schema.org/",
+        "http://schema.org/",
+        "https://schema.org",
+        "http://schema.org"
+      ],
+      "title": "ContextEnum",
+      "type": "string"
+    },
+    "CustomAttribute": {
+      "properties": {
+        "text": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "title": "Text"
+        },
+        "numbers": {
+          "anyOf": [
+            { "items": { "type": "number" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "title": "Numbers"
+        }
+      },
+      "required": ["text", "numbers"],
+      "title": "CustomAttribute",
+      "type": "object"
+    },
+    "FulfillmentInfo": {
+      "properties": {
+        "type": {
+          "description": "Fulfillment type such as 'pickup-in-store', 'same-day-delivery', or a custom type.",
+          "pattern": "^(pickup-in-store|ship-to-store|same-day-delivery|next-day-delivery|custom-type-\\d)$",
+          "title": "Type",
+          "type": "string"
+        },
+        "place_ids": {
+          "description": "Store or region IDs for the fulfillment type. Must match the pattern '[a-zA-Z0-9_-]'.",
+          "items": { "type": "string" },
+          "maxItems": 3000,
+          "title": "Place Ids",
+          "type": "array"
+        }
+      },
+      "required": ["type", "place_ids"],
+      "title": "FulfillmentInfo",
+      "type": "object"
+    },
+    "Image": {
+      "properties": {
+        "url": {
+          "description": "Required. URI of the image. Must be a valid UTF-8 encoded URI with a maximum length of 5000 characters.",
+          "title": "Url",
+          "type": "string"
+        },
+        "height": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Height of the image in pixels. Must be nonnegative.",
+          "title": "Height"
+        },
+        "width": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Width of the image in pixels. Must be nonnegative.",
+          "title": "Width"
+        }
+      },
+      "required": ["url"],
+      "title": "Image",
+      "type": "object"
+    },
+    "Interval": {
+      "properties": {
+        "min_value": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "title": "Min Value"
+        },
+        "max_value": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "title": "Max Value"
+        }
+      },
+      "required": ["min_value", "max_value"],
+      "title": "Interval",
+      "type": "object"
+    },
+    "Item": {
+      "properties": {
+        "id_": { "title": "Id", "type": "string" },
+        "name": { "title": "Name", "type": "string" }
+      },
+      "required": ["id_", "name"],
+      "title": "Item",
+      "type": "object"
+    },
+    "MediaObject": {
+      "description": "Schema.org MediaObject model.",
+      "properties": {
+        "@context": {
+          "default": "https://schema.org",
+          "title": "@Context",
+          "type": "string"
+        },
+        "@type": {
+          "default": "MediaObject",
+          "title": "@Type",
+          "type": "string"
+        },
+        "contentUrl": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "URL to the actual content of the media object.",
+          "title": "Contenturl"
+        },
+        "encodingFormat": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The media format or mime type.",
+          "title": "Encodingformat"
+        },
+        "uploadDate": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "The date the media was uploaded.",
+          "title": "Uploaddate"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The name of the media object.",
+          "title": "Name"
+        }
+      },
+      "title": "MediaObject",
+      "type": "object"
+    },
+    "Offer": {
+      "description": "Schema.org Offer model.",
+      "properties": {
+        "@type": { "default": "Offer", "title": "@Type", "type": "string" },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Name of the offer.",
+          "title": "Name"
+        },
+        "price": {
+          "description": "Price of the offer.",
+          "title": "Price",
+          "type": "number"
+        },
+        "priceCurrency": {
+          "description": "Currency of the price.",
+          "title": "Pricecurrency",
+          "type": "string"
+        },
+        "sku": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "SKU of the product.",
+          "title": "Sku"
+        },
+        "availability": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Availability of the product.",
+          "title": "Availability"
+        },
+        "itemCondition": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Condition of the item.",
+          "title": "Itemcondition"
+        },
+        "seller": {
+          "anyOf": [{ "$ref": "#/$defs/Organization" }, { "type": "null" }],
+          "default": null,
+          "description": "Seller offering the item."
+        }
+      },
+      "required": ["price", "priceCurrency"],
+      "title": "Offer",
+      "type": "object"
+    },
+    "Offers": {
+      "description": "Wrapper class for a list of offers.",
+      "properties": {
+        "offers": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Offer" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "A list of individual offers for the product.",
+          "title": "Offers"
+        },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The URL where the product can be purchased.",
+          "title": "Url"
+        },
+        "itemCondition": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The condition of the product (e.g., NewCondition, UsedCondition).",
+          "title": "Itemcondition"
+        }
+      },
+      "title": "Offers",
+      "type": "object"
+    },
+    "Organization": {
+      "description": "Schema.org model for Organization.",
+      "properties": {
+        "context": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "https://schema.org",
+          "title": "Context"
+        },
+        "type": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "Organization",
+          "title": "Type"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Name"
+        },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Url"
+        },
+        "logo": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Logo"
+        },
+        "contactPoint": {
+          "anyOf": [{ "$ref": "#/$defs/ContactPoint" }, { "type": "null" }]
+        },
+        "sameAs": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "title": "Sameas"
+        }
+      },
+      "required": ["name", "url", "logo", "contactPoint", "sameAs"],
+      "title": "Organization",
+      "type": "object"
+    },
+    "Person": {
+      "description": "Schema.org Person definition.",
+      "properties": {
+        "@type": { "default": "Person", "title": "@Type", "type": "string" },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "description": "The name of the person.",
+          "title": "Name"
+        }
+      },
+      "required": ["name"],
+      "title": "Person",
+      "type": "object"
+    },
+    "PostalAddress": {
+      "description": "Schema.org model for PostalAddress.",
+      "properties": {
+        "type": {
+          "default": "PostalAddress",
+          "title": "Type",
+          "type": "string"
+        },
+        "streetAddress": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Streetaddress"
+        },
+        "addressLocality": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Addresslocality"
+        },
+        "addressRegion": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Addressregion"
+        },
+        "postalCode": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Postalcode"
+        },
+        "addressCountry": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "title": "Addresscountry"
+        }
+      },
+      "required": [
+        "streetAddress",
+        "addressLocality",
+        "addressRegion",
+        "postalCode",
+        "addressCountry"
+      ],
+      "title": "PostalAddress",
+      "type": "object"
+    },
+    "PriceInfo": {
+      "properties": {
+        "currency_code": {
+          "description": "3-letter ISO currency code.",
+          "title": "Currency Code",
+          "type": "string"
+        },
+        "price": {
+          "description": "Price of the product.",
+          "title": "Price",
+          "type": "number"
+        },
+        "original_price": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "default": null,
+          "description": "Original price without discount.",
+          "title": "Original Price"
+        },
+        "cost": {
+          "anyOf": [{ "type": "number" }, { "type": "null" }],
+          "default": null,
+          "description": "Cost of the product used for gross profit reporting.",
+          "title": "Cost"
+        },
+        "price_effective_time": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Timestamp when the price becomes effective.",
+          "title": "Price Effective Time"
+        },
+        "price_expire_time": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Timestamp when the price stops being effective.",
+          "title": "Price Expire Time"
+        },
+        "price_range": {
+          "anyOf": [{ "$ref": "#/$defs/PriceRange" }, { "type": "null" }],
+          "default": null,
+          "description": "Price range of variant products."
+        }
+      },
+      "required": ["currency_code", "price"],
+      "title": "PriceInfo",
+      "type": "object"
+    },
+    "PriceRange": {
+      "properties": {
+        "price": {
+          "anyOf": [{ "$ref": "#/$defs/Interval" }, { "type": "null" }],
+          "default": null,
+          "description": "Price interval of all variant products."
+        },
+        "original_price": {
+          "anyOf": [{ "$ref": "#/$defs/Interval" }, { "type": "null" }],
+          "default": null,
+          "description": "Original price interval of all variant products."
+        }
+      },
+      "title": "PriceRange",
+      "type": "object"
+    },
+    "Product": {
+      "description": "FKA - Formerly Known as Extracted Product",
+      "properties": {
+        "id": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Product identifier.",
+          "title": "Id"
+        },
+        "catalog": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Catalog name, or ecommerce site name. Eg: Macys, sephora etc",
+          "title": "Catalog"
+        },
+        "url": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Canonical URL linking to the product detail page.",
+          "title": "Url"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Full name or title of the product.",
+          "title": "Name"
+        },
+        "@type": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "Product",
+          "description": "The schema type.",
+          "title": "@Type"
+        },
+        "primary_product_id": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Used by Variant to refer to the productGroupID of the productGroup in which the product belongs",
+          "title": "Primary Product Id"
+        },
+        "description": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Product description.",
+          "title": "Description"
+        },
+        "gtin": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Global Trade Item Number.",
+          "title": "Gtin"
+        },
+        "categories": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Category" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Product categories.",
+          "title": "Categories"
+        },
+        "brand": {
+          "anyOf": [
+            { "$ref": "#/$defs/Brand" },
+            { "$ref": "#/$defs/Organization" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "The brand or organization associated with the product.",
+          "title": "Brand"
+        },
+        "language_code": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": "en-US",
+          "description": "Language of the name and description.",
+          "title": "Language Code"
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "additionalProperties": { "$ref": "#/$defs/CustomAttribute" },
+              "type": "object"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Extra product attributes.",
+          "title": "Attributes"
+        },
+        "tags": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Custom tags associated with the product.",
+          "title": "Tags"
+        },
+        "price_info": {
+          "anyOf": [{ "$ref": "#/$defs/PriceInfo" }, { "type": "null" }],
+          "default": null,
+          "description": "Product price and cost information."
+        },
+        "aggregateRating": {
+          "anyOf": [{ "$ref": "#/$defs/Rating" }, { "type": "null" }],
+          "default": null,
+          "description": "Product rating."
+        },
+        "images": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Image" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Product image.",
+          "title": "Images"
+        },
+        "image": {
+          "anyOf": [{ "$ref": "#/$defs/Image" }, { "type": "null" }],
+          "default": null,
+          "description": "Primary product image."
+        },
+        "available_time": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Timestamp when the product becomes available.",
+          "title": "Available Time"
+        },
+        "availability": {
+          "anyOf": [{ "$ref": "#/$defs/AvailabilityEnum" }, { "type": "null" }],
+          "default": "IN_STOCK",
+          "description": "Product availability."
+        },
+        "available_quantity": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Available quantity of the item.",
+          "title": "Available Quantity"
+        },
+        "fulfillment_info": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/FulfillmentInfo" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Fulfillment information.",
+          "title": "Fulfillment Info"
+        },
+        "audience": {
+          "anyOf": [{ "$ref": "#/$defs/Audience" }, { "type": "null" }],
+          "default": null,
+          "description": "Target group associated with the product."
+        },
+        "color_info": {
+          "anyOf": [{ "$ref": "#/$defs/ColorInfo" }, { "type": "null" }],
+          "default": null,
+          "description": "Color of the product."
+        },
+        "sizes": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Size of the product.",
+          "title": "Sizes"
+        },
+        "materials": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Material of the product.",
+          "title": "Materials"
+        },
+        "patterns": {
+          "anyOf": [
+            { "items": { "type": "string" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Pattern or graphic print of the product.",
+          "title": "Patterns"
+        },
+        "promotions": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Promotion" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Promotions applied to the product.",
+          "title": "Promotions"
+        },
+        "breadcrumbList": {
+          "anyOf": [{ "$ref": "#/$defs/BreadcrumbList" }, { "type": "null" }],
+          "default": null,
+          "description": "Breadcrumb list of the product."
+        },
+        "corporation": {
+          "anyOf": [{ "$ref": "#/$defs/Organization" }, { "type": "null" }],
+          "default": null,
+          "description": "Organization details."
+        },
+        "offers": {
+          "anyOf": [
+            { "$ref": "#/$defs/Offer" },
+            { "$ref": "#/$defs/AggregateOffer" },
+            { "$ref": "#/$defs/Offers" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Offer or AggregateOffer for the product.",
+          "title": "Offers"
+        },
+        "extra_text": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Extra text field for additional information. Extracted from the web-page",
+          "title": "Extra Text"
+        },
+        "reviews": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/Review" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "List of reviews for the product.",
+          "title": "Reviews"
+        },
+        "3dModel": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/ThreeDModel" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "3D model of the product.",
+          "title": "3Dmodel"
+        }
+      },
+      "title": "Product",
+      "type": "object"
+    },
+    "Promotion": {
+      "properties": {
+        "promotion_id": { "title": "Promotion Id", "type": "string" }
+      },
+      "required": ["promotion_id"],
+      "title": "Promotion",
+      "type": "object"
+    },
+    "Rating": {
+      "properties": {
+        "@type": {
+          "anyOf": [{ "$ref": "#/$defs/RatingTypeEnum" }, { "type": "null" }],
+          "default": null
+        },
+        "ratingCount": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Total number of ratings. Must be nonnegative.",
+          "title": "Ratingcount"
+        },
+        "ratingValue": {
+          "anyOf": [
+            { "maximum": 5.0, "minimum": 1.0, "type": "number" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Average rating, scaled between 1-5.",
+          "title": "Ratingvalue"
+        },
+        "rating_histogram": {
+          "anyOf": [
+            { "items": { "type": "integer" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "List of rating counts per rating value.",
+          "title": "Rating Histogram"
+        }
+      },
+      "title": "Rating",
+      "type": "object"
+    },
+    "RatingTypeEnum": {
+      "enum": ["AggregateRating", "Rating"],
+      "title": "RatingTypeEnum",
+      "type": "string"
+    },
+    "Review": {
+      "description": "Schema.org Review definition.",
+      "properties": {
+        "@type": { "default": "Review", "title": "@Type", "type": "string" },
+        "author": {
+          "$ref": "#/$defs/Person",
+          "default": null,
+          "description": "The author of the review."
+        },
+        "datePublished": {
+          "default": null,
+          "description": "The date the review was published.",
+          "format": "date",
+          "title": "Datepublished",
+          "type": "string"
+        },
+        "reviewBody": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The body of the review.",
+          "title": "Reviewbody"
+        },
+        "reviewRating": {
+          "$ref": "#/$defs/Rating",
+          "default": null,
+          "description": "The rating given in this review."
+        }
+      },
+      "title": "Review",
+      "type": "object"
+    },
+    "ThreeDModel": {
+      "description": "Schema.org 3DModel model.",
+      "properties": {
+        "@context": {
+          "default": "https://schema.org",
+          "title": "@Context",
+          "type": "string"
+        },
+        "@type": { "default": "3DModel", "title": "@Type", "type": "string" },
+        "contentUrl": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "URL to the actual content of the media object.",
+          "title": "Contenturl"
+        },
+        "encodingFormat": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The file format of the 3D model (e.g., 'model/gltf+json').",
+          "title": "Encodingformat"
+        },
+        "uploadDate": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "The date the media was uploaded.",
+          "title": "Uploaddate"
+        },
+        "name": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The name of the media object.",
+          "title": "Name"
+        },
+        "author": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "Author of the work.",
+          "title": "Author"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "License under which the work is published.",
+          "title": "License"
+        },
+        "datePublished": {
+          "anyOf": [
+            { "format": "date-time", "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Date of first publication.",
+          "title": "Datepublished"
+        },
+        "creator": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The creator of the 3D model.",
+          "title": "Creator"
+        },
+        "contentSize": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "File size in megabytes or gigabytes.",
+          "title": "Contentsize"
+        },
+        "material": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "description": "The material used to create the 3D model.",
+          "title": "Material"
+        },
+        "embedUrl": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "A URL pointing to a player for the 3D model.",
+          "title": "Embedurl"
+        },
+        "thumbnailUrl": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "uri",
+                "maxLength": 2083,
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "A URL pointing to the model thumbnail image.",
+          "title": "Thumbnailurl"
+        },
+        "isBasedOnUrl": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "A related resource that the 3D model is based on.",
+          "title": "Isbasedonurl"
+        },
+        "interactionCount": {
+          "anyOf": [{ "type": "integer" }, { "type": "null" }],
+          "default": null,
+          "description": "Number of interactions for the 3D model.",
+          "title": "Interactioncount"
+        },
+        "encoding": {
+          "anyOf": [
+            { "items": { "$ref": "#/$defs/MediaObject" }, "type": "array" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "A media object representing the 3D model.",
+          "title": "Encoding"
+        }
+      },
+      "title": "ThreeDModel",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "id": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Product identifier.",
+      "title": "Id"
+    },
+    "catalog": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Catalog name, or ecommerce site name. Eg: Macys, sephora etc",
+      "title": "Catalog"
+    },
+    "url": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Canonical URL linking to the product detail page.",
+      "title": "Url"
+    },
+    "name": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Full name or title of the product.",
+      "title": "Name"
+    },
+    "@type": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": "Product",
+      "description": "The schema type.",
+      "title": "@Type"
+    },
+    "primary_product_id": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Used by Variant to refer to the productGroupID of the productGroup in which the product belongs",
+      "title": "Primary Product Id"
+    },
+    "description": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Product description.",
+      "title": "Description"
+    },
+    "gtin": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Global Trade Item Number.",
+      "title": "Gtin"
+    },
+    "categories": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/Category" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Product categories.",
+      "title": "Categories"
+    },
+    "brand": {
+      "anyOf": [
+        { "$ref": "#/$defs/Brand" },
+        { "$ref": "#/$defs/Organization" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "The brand or organization associated with the product.",
+      "title": "Brand"
+    },
+    "language_code": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": "en-US",
+      "description": "Language of the name and description.",
+      "title": "Language Code"
+    },
+    "attributes": {
+      "anyOf": [
+        {
+          "additionalProperties": { "$ref": "#/$defs/CustomAttribute" },
+          "type": "object"
+        },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Extra product attributes.",
+      "title": "Attributes"
+    },
+    "tags": {
+      "anyOf": [
+        { "items": { "type": "string" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Custom tags associated with the product.",
+      "title": "Tags"
+    },
+    "price_info": {
+      "anyOf": [{ "$ref": "#/$defs/PriceInfo" }, { "type": "null" }],
+      "default": null,
+      "description": "Product price and cost information."
+    },
+    "aggregateRating": {
+      "anyOf": [{ "$ref": "#/$defs/Rating" }, { "type": "null" }],
+      "default": null,
+      "description": "Product rating."
+    },
+    "images": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/Image" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Product image.",
+      "title": "Images"
+    },
+    "image": {
+      "anyOf": [{ "$ref": "#/$defs/Image" }, { "type": "null" }],
+      "default": null,
+      "description": "Primary product image."
+    },
+    "available_time": {
+      "anyOf": [
+        { "format": "date-time", "type": "string" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Timestamp when the product becomes available.",
+      "title": "Available Time"
+    },
+    "availability": {
+      "anyOf": [{ "$ref": "#/$defs/AvailabilityEnum" }, { "type": "null" }],
+      "default": "IN_STOCK",
+      "description": "Product availability."
+    },
+    "available_quantity": {
+      "anyOf": [{ "type": "integer" }, { "type": "null" }],
+      "default": null,
+      "description": "Available quantity of the item.",
+      "title": "Available Quantity"
+    },
+    "fulfillment_info": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/FulfillmentInfo" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Fulfillment information.",
+      "title": "Fulfillment Info"
+    },
+    "audience": {
+      "anyOf": [{ "$ref": "#/$defs/Audience" }, { "type": "null" }],
+      "default": null,
+      "description": "Target group associated with the product."
+    },
+    "color_info": {
+      "anyOf": [{ "$ref": "#/$defs/ColorInfo" }, { "type": "null" }],
+      "default": null,
+      "description": "Color of the product."
+    },
+    "sizes": {
+      "anyOf": [
+        { "items": { "type": "string" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Size of the product.",
+      "title": "Sizes"
+    },
+    "materials": {
+      "anyOf": [
+        { "items": { "type": "string" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Material of the product.",
+      "title": "Materials"
+    },
+    "patterns": {
+      "anyOf": [
+        { "items": { "type": "string" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Pattern or graphic print of the product.",
+      "title": "Patterns"
+    },
+    "promotions": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/Promotion" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Promotions applied to the product.",
+      "title": "Promotions"
+    },
+    "breadcrumbList": {
+      "anyOf": [{ "$ref": "#/$defs/BreadcrumbList" }, { "type": "null" }],
+      "default": null,
+      "description": "Breadcrumb list of the product."
+    },
+    "corporation": {
+      "anyOf": [{ "$ref": "#/$defs/Organization" }, { "type": "null" }],
+      "default": null,
+      "description": "Organization details."
+    },
+    "offers": {
+      "anyOf": [
+        { "$ref": "#/$defs/Offer" },
+        { "$ref": "#/$defs/AggregateOffer" },
+        { "$ref": "#/$defs/Offers" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Offer or AggregateOffer for the product.",
+      "title": "Offers"
+    },
+    "extra_text": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "Extra text field for additional information. Extracted from the web-page",
+      "title": "Extra Text"
+    },
+    "reviews": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/Review" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "List of reviews for the product.",
+      "title": "Reviews"
+    },
+    "3dModel": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/ThreeDModel" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "3D model of the product.",
+      "title": "3Dmodel"
+    },
+    "productGroupID": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "default": null,
+      "description": "ID of the product group.",
+      "title": "Productgroupid"
+    },
+    "variesBy": {
+      "anyOf": [
+        { "items": { "type": "string" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Indicates the property or properties by which the variants in a ProductGroup vary, e.g. their size, color, etc.",
+      "title": "Variesby"
+    },
+    "hasVariant": {
+      "anyOf": [
+        { "items": { "$ref": "#/$defs/Product" }, "type": "array" },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Indicates a list of Products that are variants of this ProductGroup",
+      "title": "Hasvariant"
+    }
+  },
+  "title": "ProductGroup",
+  "type": "object"
+}
