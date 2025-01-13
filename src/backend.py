@@ -274,47 +274,18 @@ async def get_table_analytics(table_name: str):
     # Configure DuckDB for external aggregation
     cpu_count = multiprocessing.cpu_count()
     conn.execute(f"PRAGMA threads={cpu_count}")
-    conn.execute(
-        f"PRAGMA external_threads={max(1, cpu_count - 1)}"
-    )  # Leave one thread for system
-    conn.execute("PRAGMA memory_limit='8GB'")  # Reduced to 8GB
-    conn.execute("PRAGMA temp_directory='/tmp'")  # Use disk for temporary storage
+    conn.execute(f"PRAGMA external_threads={max(1, cpu_count - 1)}")
+    conn.execute("PRAGMA memory_limit='8GB'")
+    conn.execute("PRAGMA temp_directory='/tmp'")
 
-    # Create a more optimized view
-    conn.execute(f"""
-        CREATE VIEW IF NOT EXISTS product_view AS
-        SELECT 
-            json_extract_string(extracted_product, '$.id') as id,
-            json_extract_string(extracted_product, '$.brand.name') as brand_name,
-            CASE 
-                WHEN json_extract_string(extracted_product, '$.image') IS NULL THEN NULL
-                ELSE 1  -- We only need to know if image exists, not the actual URL
-            END as has_image,
-            CASE 
-                WHEN json_extract_string(extracted_product, '$.hasVariant') = '[]' THEN 0
-                ELSE json_array_length(json_extract_string(extracted_product, '$.hasVariant'))
-            END as variant_count,
-            TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-            TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
-            TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
-            TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.materials')), ',') as materials,
-            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.audience.genders')), ',') as genders,
-            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.audience.age_groups')), ',') as age_groups,
-            length(json_extract_string(extracted_product, '$.description')) > 0 as has_description,
-            json_extract_string(extracted_product, '$.name') as name
-        FROM {table_name}
-        WHERE json_extract_string(extracted_product, '$.id') IS NOT NULL
-    """)
-
-    # Define CTEs for analytics
+    # Use the pre-extracted fields directly
     stats_ctes = """
         WITH basic_stats AS (
             SELECT 
                 COUNT(*) as total_records,
                 COUNT(DISTINCT brand_name) as unique_brands,
                 AVG(CASE WHEN price IS NOT NULL THEN 1 ELSE 0 END) * 100 as price_completeness
-            FROM product_view
+            FROM {table_name}_extracted
         ),
         uniqueness_analysis AS (
             SELECT struct_pack(
@@ -331,7 +302,7 @@ async def get_table_analytics(table_name: str):
                     total_values := COUNT(description)
                 )
             ) as field_uniqueness
-            FROM product_view
+            FROM {table_name}_extracted
         ),
         null_analysis AS (
             SELECT struct_pack(
@@ -345,7 +316,7 @@ async def get_table_analytics(table_name: str):
                     null_percentage := ROUND(100.0 * COUNT(CASE WHEN description IS NULL THEN 1 END) / COUNT(*), 2)
                 )
             ) as field_nulls
-            FROM product_view
+            FROM {table_name}_extracted
         ),
         variant_stats AS (
             SELECT 
@@ -355,7 +326,7 @@ async def get_table_analytics(table_name: str):
                 END as variant_count,
                 COUNT(*) as product_count,
                 ROUND(AVG(price), 2) as avg_price
-            FROM product_view
+            FROM {table_name}_extracted
             GROUP BY 1
         ),
         discount_stats AS (
@@ -368,7 +339,7 @@ async def get_table_analytics(table_name: str):
                 END as discount_range,
                 COUNT(*) as product_count,
                 ROUND(AVG(rating), 2) as avg_rating
-            FROM product_view
+            FROM {table_name}_extracted
             GROUP BY 1
         ),
         rating_stats AS (
@@ -378,7 +349,7 @@ async def get_table_analytics(table_name: str):
                 ROUND(CORR(rating, price), 2) as price_rating_correlation,
                 ROUND(AVG(rating_count), 2) as avg_review_count,
                 MAX(rating_count) as max_review_count
-            FROM product_view
+            FROM {table_name}_extracted
             WHERE rating IS NOT NULL
         ),
         material_stats AS (
@@ -387,7 +358,7 @@ async def get_table_analytics(table_name: str):
                 COUNT(*) as count,
                 ROUND(AVG(price), 2) as avg_price,
                 array_agg(DISTINCT brand_name) as brands
-            FROM product_view,
+            FROM {table_name}_extracted,
                  UNNEST(string_to_array(trim(both '[]' from materials), ',')) as m(value)
             WHERE materials IS NOT NULL AND brand_name IS NOT NULL
             GROUP BY 1
@@ -402,7 +373,7 @@ async def get_table_analytics(table_name: str):
                 ROUND(MAX(price), 2) as max_price,
                 ROUND(AVG(price), 2) as avg_price,
                 ROUND(AVG(rating), 2) as avg_rating
-            FROM product_view
+            FROM {table_name}_extracted
             WHERE brand_name IS NOT NULL
             GROUP BY 1
             HAVING COUNT(*) >= 5
@@ -415,7 +386,7 @@ async def get_table_analytics(table_name: str):
                 a.value as age_group,
                 COUNT(*) as product_count,
                 ROUND(AVG(price), 2) as avg_price
-            FROM product_view,
+            FROM {table_name}_extracted,
                  UNNEST(string_to_array(trim(both '[]' from genders), ',')) as g(value),
                  UNNEST(string_to_array(trim(both '[]' from age_groups), ',')) as a(value)
             WHERE genders IS NOT NULL AND age_groups IS NOT NULL
@@ -441,7 +412,48 @@ async def get_table_analytics(table_name: str):
                     THEN json_array_length(variants_json)
                     ELSE 0 
                 END) as min_variant_images
-            FROM product_view
+            FROM {table_name}_extracted
+        ),
+        additional_attr_stats AS (
+            WITH RECURSIVE cleaned_json AS (
+                SELECT 
+                    CASE 
+                        WHEN additional_attributes_json IS NULL THEN ''
+                        ELSE trim(both '{}' from additional_attributes_json)
+                    END as json_text,
+                    product_id
+                FROM {table_name}_extracted
+                WHERE additional_attributes_json IS NOT NULL
+                    AND additional_attributes_json != 'null'
+                    AND additional_attributes_json != '{}'
+            ),
+            split_pairs AS (
+                SELECT 
+                    trim(both '"' from split_part(value, ':', 1)) as attr_name,
+                    trim(both '"' from split_part(value, ':', 2)) as attr_value,
+                    c.product_id
+                FROM cleaned_json c,
+                     (SELECT unnest(string_to_array(json_text, ',')) as value, product_id 
+                      FROM cleaned_json) as pairs(value, product_id)
+                WHERE value != ''
+            )
+            SELECT 
+                attr_name,
+                COUNT(DISTINCT sp.product_id) as occurrence_count,
+                COUNT(DISTINCT attr_value) as unique_values,
+                ROUND(100.0 * COUNT(DISTINCT sp.product_id) / (
+                    SELECT COUNT(*) 
+                    FROM {table_name}_extracted 
+                    WHERE additional_attributes_json IS NOT NULL
+                ), 2) as coverage_percentage,
+                array_agg(DISTINCT attr_value) FILTER (WHERE attr_value IS NOT NULL) as value_samples
+            FROM split_pairs sp
+            WHERE attr_name != '' 
+                AND NOT attr_name LIKE 'style%'  -- Exclude all style-related attributes
+            GROUP BY attr_name
+            HAVING COUNT(DISTINCT sp.product_id) >= 5
+                AND COUNT(DISTINCT attr_value) > 1  -- Only include attributes with multiple unique values
+            ORDER BY occurrence_count DESC
         )
     """
 
@@ -520,13 +532,53 @@ async def get_table_analytics(table_name: str):
                         )) FROM audience_stats)
                     )
                     ELSE NULL
-                END
+                END,
+                additional_attributes_analysis := struct_pack(
+                    attributes := (
+                        SELECT array_agg(struct_pack(
+                            name := attr_name,
+                            occurrence_count := occurrence_count,
+                            unique_values := unique_values,
+                            coverage_percentage := coverage_percentage,
+                            value_samples := value_samples
+                        ))
+                        FROM additional_attr_stats
+                    ),
+                    statistics := struct_pack(
+                        total_attributes := (SELECT COUNT(DISTINCT attr_name) FROM additional_attr_stats),
+                        avg_attributes_per_product := (
+                            SELECT AVG(
+                                array_length(
+                                    string_to_array(
+                                        CASE 
+                                            WHEN additional_attributes_json IS NULL THEN ''
+                                            ELSE trim(both '{}' from additional_attributes_json)
+                                        END,
+                                        ','
+                                    )
+                                )
+                            )
+                            FROM {table_name}_extracted
+                            WHERE additional_attributes_json IS NOT NULL
+                                AND additional_attributes_json != 'null'
+                                AND additional_attributes_json != '{}'
+                        ),
+                        products_with_attributes := (
+                            SELECT COUNT(*)
+                            FROM {table_name}_extracted
+                            WHERE additional_attributes_json IS NOT NULL
+                                AND additional_attributes_json != 'null'
+                                AND additional_attributes_json != '{}'
+                        )
+                    )
+                )
             )
         )::json as analytics
     """
 
     # Combine all parts
     analytics_query = stats_ctes + final_select
+    analytics_query = analytics_query.replace("{table_name}", table_name)
 
     # Execute the combined query
     cursor = conn.cursor()
