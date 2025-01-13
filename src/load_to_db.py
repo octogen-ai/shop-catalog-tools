@@ -39,13 +39,12 @@ def create_nested_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     new_df = pd.DataFrame()
     flattened = is_data_flattened(df)
-    
+
     if flattened:
         logger.info("Processing flattened data")
         # For flattened data, we need to create the extracted_product from all columns
         new_df["extracted_product"] = df.apply(
-            lambda x: json.dumps(x.to_dict(), cls=NumpyEncoder), 
-            axis=1
+            lambda x: json.dumps(x.to_dict(), cls=NumpyEncoder), axis=1
         )
         new_df["catalog"] = df["catalog"]
         new_df["product_group_id"] = df["productGroupID"]
@@ -57,17 +56,19 @@ def create_nested_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         )
         new_df["catalog"] = df["catalog"]
         new_df["product_group_id"] = df["product_group_id"]
-    
+
     # Verify all values are strings before returning
     if not new_df["extracted_product"].apply(lambda x: isinstance(x, str)).all():
         logger.error("Some extracted_product values are not strings!")
-        non_string_samples = new_df[~new_df["extracted_product"].apply(lambda x: isinstance(x, str))]["extracted_product"].head()
+        non_string_samples = new_df[
+            ~new_df["extracted_product"].apply(lambda x: isinstance(x, str))
+        ]["extracted_product"].head()
         logger.error(f"Non-string samples: {non_string_samples}")
         # Force conversion to string
         new_df["extracted_product"] = new_df["extracted_product"].apply(
             lambda x: json.dumps(x, cls=NumpyEncoder) if not isinstance(x, str) else x
         )
-    
+
     return new_df
 
 
@@ -87,9 +88,11 @@ def load_to_sqlite(
         if is_flattened:
             first_df = create_nested_dataframe(first_df)
         first_df.to_sql(table_name, conn, if_exists="replace", index=False)
-        
+
         cursor = conn.cursor()
-        initial_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        initial_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[
+            0
+        ]
         total_products += initial_count
         logger.info(
             f"Created table {table_name} with schema from first file ({initial_count} products)"
@@ -111,17 +114,19 @@ def load_to_sqlite(
                 df = pd.read_parquet(parquet_file)
                 if is_flattened:
                     df = create_nested_dataframe(df)
-                
+
                 # Count total records in the new file
                 file_total = len(df)
-                
+
                 # Use temporary table for deduplication
                 temp_table = f"{table_name}_temp"
                 df.to_sql(temp_table, conn, if_exists="replace", index=False)
-                
+
                 # Get count before insertion
-                pre_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                
+                pre_count = cursor.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
+
                 # Insert non-duplicate records
                 cursor.execute(f"""
                     INSERT INTO {table_name}
@@ -133,12 +138,14 @@ def load_to_sqlite(
                         WHERE g.product_group_id = json_extract(t.extracted_product, '$.productGroupID')
                     )
                 """)
-                
+
                 # Get count after insertion
-                post_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                post_count = cursor.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
                 inserted = post_count - pre_count
                 duplicates_skipped += file_total - inserted
-                
+
                 # Update group IDs table
                 cursor.execute(f"""
                     INSERT INTO {table_name}_group_ids
@@ -147,16 +154,20 @@ def load_to_sqlite(
                     WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
                     AND product_group_id NOT IN (SELECT product_group_id FROM {table_name}_group_ids)
                 """)
-                
+
                 # Drop temporary table
                 cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
                 conn.commit()
-                
+
                 total_products += inserted
-                logger.info(f"Successfully loaded {inserted} rows into {table_name} ({file_total - inserted} duplicates skipped)")
+                logger.info(
+                    f"Successfully loaded {inserted} rows into {table_name} ({file_total - inserted} duplicates skipped)"
+                )
             except sqlite3.IntegrityError as e:
                 duplicates_skipped += 1
-                logger.warning(f"Skipped duplicate product group in {parquet_file}: {str(e)}")
+                logger.warning(
+                    f"Skipped duplicate product group in {parquet_file}: {str(e)}"
+                )
             except Exception as e:
                 logger.error(f"Error loading {parquet_file}: {str(e)}")
 
@@ -168,7 +179,10 @@ def load_to_sqlite(
 
 
 def load_to_duckdb(
-    conn: duckdb.DuckDBPyConnection, parquet_files: list[str], table_name: str, is_flattened: bool = False
+    conn: duckdb.DuckDBPyConnection,
+    parquet_files: list[str],
+    table_name: str,
+    is_flattened: bool = False,
 ) -> tuple[int, int]:
     """Load parquet files into DuckDB database."""
     total_products = 0
@@ -179,71 +193,123 @@ def load_to_duckdb(
         first_df = pd.read_parquet(parquet_files[0])
         if is_flattened:
             first_df = create_nested_dataframe(first_df)
-        
+
         # Count total records in first file
         file_total = len(first_df)
-        
-        # Drop existing table if it exists
+
+        # Drop existing tables if they exist
         conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        
+        conn.execute(f"DROP TABLE IF EXISTS {table_name}_extracted")
+
         # Create temporary table for initial data
         conn.execute("DROP TABLE IF EXISTS temp_first")
         conn.execute("""
             CREATE TEMPORARY TABLE temp_first AS 
             SELECT *, 
-                json_extract_string(extracted_product, 'productGroupID') as product_group_id 
+                json_extract_string(extracted_product, 'productGroupID') as product_group_id,
+                -- Pre-extract commonly used fields
+                json_extract_string(extracted_product, 'id') as product_id,
+                json_extract_string(extracted_product, '$.brand.name') as brand_name,
+                json_extract_string(extracted_product, 'name') as name,
+                json_extract_string(extracted_product, 'description') as description,
+                json_extract_string(extracted_product, 'image') as product_image,
+                TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
+                TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
+                TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
+                TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
+                json_extract_string(extracted_product, 'materials') as materials,
+                json_extract_string(extracted_product, '$.audience.genders') as genders,
+                json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+                json_extract_string(extracted_product, 'hasVariant') as variants_json,
+                json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
             FROM first_df
             WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
         """)
-        
-        # Create main table with deduplicated data
+
+        # Create main table with deduplicated data and extracted fields
         conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name}_extracted AS 
             SELECT DISTINCT ON (product_group_id) *
             FROM temp_first
             WHERE product_group_id IS NOT NULL
             ORDER BY product_group_id, extracted_product
         """)
-        
+
+        # Create original table with just the raw JSON for backwards compatibility
+        conn.execute(f"""
+            CREATE TABLE {table_name} AS 
+            SELECT product_group_id, extracted_product
+            FROM {table_name}_extracted
+        """)
+
         initial_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         duplicates_skipped += file_total - initial_count
         total_products += initial_count
-        
-        logger.info(f"Created table {table_name} with schema from first file ({initial_count} products, {file_total - initial_count} duplicates skipped)")
+
+        logger.info(
+            f"Created tables {table_name} and {table_name}_extracted with schema from first file ({initial_count} products, {file_total - initial_count} duplicates skipped)"
+        )
 
         # Add unique index
         conn.execute(f"""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id 
-            ON {table_name} (product_group_id)
+            ON {table_name}_extracted (product_group_id)
         """)
 
         # Append remaining files
         for parquet_file in parquet_files[1:]:
-            logger.info(f"Loading {parquet_file} into table {table_name}")
+            logger.info(f"Loading {parquet_file} into tables")
             try:
                 df = pd.read_parquet(parquet_file)
                 if is_flattened:
                     df = create_nested_dataframe(df)
-                
+
                 file_total = len(df)
-                
-                # Create temporary table
+
+                # Create temporary table with extracted fields
                 conn.execute("DROP TABLE IF EXISTS temp_products")
                 conn.execute("""
                     CREATE TEMPORARY TABLE temp_products AS 
                     SELECT *, 
-                        json_extract_string(extracted_product, 'productGroupID') as product_group_id 
+                        json_extract_string(extracted_product, 'productGroupID') as product_group_id,
+                        json_extract_string(extracted_product, 'id') as product_id,
+                        json_extract_string(extracted_product, '$.brand.name') as brand_name,
+                        json_extract_string(extracted_product, 'name') as name,
+                        json_extract_string(extracted_product, 'description') as description,
+                        json_extract_string(extracted_product, 'image') as product_image,
+                        TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
+                        TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
+                        TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
+                        TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
+                        json_extract_string(extracted_product, 'materials') as materials,
+                        json_extract_string(extracted_product, '$.audience.genders') as genders,
+                        json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+                        json_extract_string(extracted_product, 'hasVariant') as variants_json,
+                        json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
                     FROM df
                     WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
                 """)
-                
+
                 # Count records before insertion
-                pre_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                
-                # Insert non-duplicate records
+                pre_count = conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
+
+                # Insert non-duplicate records into both tables
+                conn.execute(f"""
+                    INSERT INTO {table_name}_extracted
+                    SELECT t.* 
+                    FROM temp_products t
+                    WHERE NOT EXISTS (
+                        SELECT 1 
+                        FROM {table_name}_extracted m 
+                        WHERE m.product_group_id = t.product_group_id
+                    )
+                """)
+
                 conn.execute(f"""
                     INSERT INTO {table_name}
-                    SELECT t.* 
+                    SELECT product_group_id, extracted_product
                     FROM temp_products t
                     WHERE NOT EXISTS (
                         SELECT 1 
@@ -251,14 +317,18 @@ def load_to_duckdb(
                         WHERE m.product_group_id = t.product_group_id
                     )
                 """)
-                
+
                 # Count records after insertion
-                post_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                post_count = conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
                 inserted = post_count - pre_count
                 duplicates_skipped += file_total - inserted
                 total_products += inserted
-                
-                logger.info(f"Successfully loaded {inserted} rows into {table_name} ({file_total - inserted} duplicates skipped)")
+
+                logger.info(
+                    f"Successfully loaded {inserted} rows ({file_total - inserted} duplicates skipped)"
+                )
             except Exception as e:
                 logger.error(f"Error loading {parquet_file}: {str(e)}")
 
@@ -296,7 +366,9 @@ def load_parquet_files_to_db(
         if parquet_files:
             first_df = pd.read_parquet(parquet_files[0])
             is_flattened = is_data_flattened(first_df)
-            logger.info(f"Detected {'flattened' if is_flattened else 'nested'} data format")
+            logger.info(
+                f"Detected {'flattened' if is_flattened else 'nested'} data format"
+            )
 
         if db_type == "sqlite":
             total_products, duplicates_skipped = load_to_sqlite(
@@ -356,16 +428,16 @@ def main() -> None:
 def is_data_flattened(df: pd.DataFrame) -> bool:
     """
     Determine if a DataFrame contains flattened data by examining its structure.
-    
+
     Returns:
         bool: True if data appears to be flattened, False otherwise
     """
     # Print columns for debugging
-    if 'extracted_product' in df.columns:
+    if "extracted_product" in df.columns:
         # If it has extracted_product column, it's NOT flattened
         # logger.info("Found extracted_product column, data is NOT flattened")
         return False
-    
+
     # If no extracted_product column, it IS flattened
     # logger.info("No extracted_product column found, data IS flattened")
     return True
