@@ -20,11 +20,11 @@ run_vite_server() {
 # Function to run the FastAPI server
 run_fastapi_server() {
     echo "Starting FastAPI server..."
-    uv run -m uvicorn src.backend:app --reload --port 8000
+    uv run -m uvicorn src.backend:app --reload --port 8000 --workers 2
 }
 
-# Trap SIGINT to kill background processes
-trap 'kill $(jobs -p)' SIGINT
+# Trap SIGINT to kill background processes and their children
+trap 'pkill -P $$; exit' SIGINT
 
 # Build the Svelte app
 build_svelte_app
