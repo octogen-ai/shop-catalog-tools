@@ -14,6 +14,7 @@ from pathlib import Path
 import duckdb
 from typing import Union
 from collections import Counter
+import multiprocessing
 
 app = FastAPI()
 
@@ -214,8 +215,9 @@ async def get_table_analytics(table_name: str):
             "requires_duckdb": True
         })
     
-    # Enable parallel processing
-    conn.execute("SET threads TO 8")  # Adjust based on your CPU cores
+    # Dynamically set threads based on CPU cores
+    cpu_count = multiprocessing.cpu_count()
+    conn.execute(f"SET threads TO {cpu_count}")
     
     # First part of the query with CTEs
     ctes_query = f"""
@@ -288,7 +290,6 @@ async def get_table_analytics(table_name: str):
                 ROUND(AVG(price), 2) as avg_price
             FROM product_view
             GROUP BY 1
-            ORDER BY product_count DESC
         ),
         discount_stats AS (
             SELECT 
@@ -400,7 +401,7 @@ async def get_table_analytics(table_name: str):
                         variant_count := variant_count,
                         product_count := product_count,
                         avg_price := avg_price
-                    )) FROM variant_stats),
+                    ) ORDER BY product_count DESC) FROM variant_stats),
                     statistics := struct_pack(
                         avg_variants := (SELECT AVG(variant_count) FROM variant_stats WHERE variant_count > 0),
                         max_variants := (SELECT MAX(variant_count) FROM variant_stats),
@@ -469,4 +470,26 @@ async def get_table_analytics(table_name: str):
     return JSONResponse({
         "requires_duckdb": True,
         **json.loads(result)
+    })
+
+@app.get("/api/catalogs")
+async def get_catalogs():
+    load_dotenv()
+    db_engine = os.getenv('DB_ENGINE', 'sqlite').lower()
+    base_dir = os.path.join(os.path.dirname(__file__), "..")
+    
+    extension = 'duckdb' if db_engine == 'duckdb' else 'sqlite'
+    alt_extension = 'db' if extension == 'sqlite' else None
+    
+    catalogs = []
+    for file in os.listdir(base_dir):
+        if file.endswith(f'_catalog.{extension}'):
+            catalog = file.replace(f'_catalog.{extension}', '')
+            catalogs.append(catalog)
+        elif alt_extension and file.endswith(f'_catalog.{alt_extension}'):
+            catalog = file.replace(f'_catalog.{alt_extension}', '')
+            catalogs.append(catalog)
+    
+    return JSONResponse({
+        "catalogs": sorted(list(set(catalogs)))
     })

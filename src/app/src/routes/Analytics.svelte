@@ -1,7 +1,6 @@
 <script>
     import { onMount } from 'svelte';
     import AnalyticsCard from '../components/AnalyticsCard.svelte';
-    import CatalogSelector from '../components/CatalogSelector.svelte';
     import { Chart } from 'chart.js/auto';
     import { toTitleCase } from '../utils.js';
     
@@ -226,6 +225,7 @@
                     </div>
 
                     <!-- Rating Analysis -->
+                    {#if analytics.advanced_analytics?.rating_analysis?.statistics.avg_rating}
                     <div class="mt-8">
                         <h3 class="text-lg font-medium mb-3">Rating Analysis</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -249,10 +249,12 @@
                                     {/if}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
-                    </div>
+                    {/if}
 
                     <!-- Material Analysis -->
+                    {#if analytics.advanced_analytics?.material_analysis?.popular_materials}
                     <div class="mt-8">
                         <h3 class="text-lg font-medium mb-3">Material Analysis</h3>
                         <div class="overflow-x-auto">
@@ -278,10 +280,12 @@
                                     {/if}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
-                    </div>
+                    {/if}
 
                     <!-- Brand Analysis -->
+                    {#if analytics.advanced_analytics?.brand_analysis?.top_brands}
                     <div class="mt-8">
                         <h3 class="text-lg font-medium mb-3">Top Brands Analysis</h3>
                         <div class="overflow-x-auto">
@@ -309,7 +313,7 @@
                             </table>
                         </div>
                     </div>
-
+                    {/if}
                     <!-- Audience Analysis -->
                     {#if analytics.advanced_analytics?.audience_analysis?.demographics}
                         <div class="mt-8">
