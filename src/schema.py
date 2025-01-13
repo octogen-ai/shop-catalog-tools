@@ -2,16 +2,13 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
 import yaml
 from pydantic import (
-    UUID4,
     AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
     HttpUrl,
-    field_validator,
 )
 from typing_extensions import Annotated
 
@@ -36,6 +33,7 @@ HttpUrlString = Annotated[str, AfterValidator(validate_url)]
 class Category(BaseModel):
     name: str
     url: Optional[str] = None
+
 
 class ContextEnum(str, Enum):
     SCHEMA_ORG_HTTPS = "https://schema.org/"
@@ -77,8 +75,10 @@ class VideoObject(BaseModel):
 
 
 class CustomAttribute(BaseModel):
-    text: Optional[List[str]]
-    numbers: Optional[List[float]]
+    text: Optional[List[str]] = Field(default=None, description="Text attributes")
+    numbers: Optional[List[float]] = Field(
+        default=None, description="Number attributes"
+    )
 
 
 class Interval(BaseModel):
@@ -517,7 +517,7 @@ class Product(BaseModel):
     #   "lengths_cm": {"numbers":[2.3, 15.4]},
     #   "heights_cm": {"numbers":[8.1, 6.4]}
     # }`.
-    attributes: Optional[Dict[str, CustomAttribute]] = Field(
+    addtional_attributes: Optional[Dict[str, CustomAttribute]] = Field(
         default=None, description="Extra product attributes."
     )
     tags: Optional[List[str]] = Field(
