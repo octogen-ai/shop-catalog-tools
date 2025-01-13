@@ -256,6 +256,51 @@ def load_to_duckdb(
             ON {table_name}_extracted (product_group_id)
         """)
 
+        # Create additional attributes table
+        conn.execute(f"DROP TABLE IF EXISTS {table_name}_additional_attrs")
+        conn.execute(f"""
+            CREATE TABLE {table_name}_additional_attrs AS
+            WITH cleaned_json AS (
+                SELECT 
+                    CASE 
+                        WHEN additional_attributes_json IS NULL THEN ''
+                        ELSE trim(both '{{}}' from additional_attributes_json)
+                    END as json_text,
+                    product_id
+                FROM {table_name}_extracted
+                WHERE additional_attributes_json IS NOT NULL
+                    AND additional_attributes_json != 'null'
+                    AND additional_attributes_json != '{{}}'
+            ),
+            split_pairs AS (
+                SELECT 
+                    trim(both '"' from split_part(value, ':', 1)) as attr_name,
+                    trim(both '"' from split_part(value, ':', 2)) as attr_value,
+                    c.product_id
+                FROM cleaned_json c,
+                     (SELECT unnest(string_to_array(json_text, ',')) as value, product_id 
+                      FROM cleaned_json) as pairs(value, product_id)
+                WHERE value != ''
+            )
+            SELECT 
+                product_id,
+                attr_name,
+                attr_value
+            FROM split_pairs
+            WHERE attr_name != ''
+                AND NOT attr_name LIKE 'style%'
+        """)
+
+        # Create indexes for better query performance
+        conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_name 
+            ON {table_name}_additional_attrs (attr_name)
+        """)
+        conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_value 
+            ON {table_name}_additional_attrs (attr_value)
+        """)
+
         # Append remaining files
         for parquet_file in parquet_files[1:]:
             logger.info(f"Loading {parquet_file} into tables")
@@ -441,6 +486,137 @@ def is_data_flattened(df: pd.DataFrame) -> bool:
     # If no extracted_product column, it IS flattened
     # logger.info("No extracted_product column found, data IS flattened")
     return True
+
+
+# Add this function to pre-process additional attributes
+def normalize_additional_attributes(product_data):
+    """Extract and normalize additional attributes from product data."""
+    try:
+        additional_attrs = product_data.get("additional_attributes", {}) or {}
+        if isinstance(additional_attrs, str):
+            additional_attrs = json.loads(additional_attrs)
+
+        # Filter out style-related attributes and normalize
+        normalized_attrs = [
+            {"attr_name": key, "attr_value": str(value)}
+            for key, value in additional_attrs.items()
+            if not key.startswith("style")
+        ]
+        return normalized_attrs
+    except (json.JSONDecodeError, AttributeError):
+        return []
+
+
+# Modify the load_data function to create and populate the additional attributes table
+def load_data(db_path: str, table_name: str, products: list):
+    """Load product data into the database with a normalized additional attributes table."""
+    is_duckdb = db_path.endswith(".duckdb")
+
+    if is_duckdb:
+        conn = duckdb.connect(db_path)
+    else:
+        conn = sqlite3.connect(db_path)
+
+    cursor = conn.cursor()
+
+    # Create the main products table
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {table_name} (
+        product_id VARCHAR PRIMARY KEY,
+        extracted_product TEXT,
+        product_group_id VARCHAR,
+        brand_name VARCHAR,
+        name VARCHAR,
+        description TEXT,
+        price DECIMAL,
+        original_price DECIMAL,
+        rating DECIMAL,
+        rating_count INTEGER,
+        product_image VARCHAR,
+        variants_json TEXT,
+        materials TEXT,
+        genders TEXT,
+        age_groups TEXT,
+        additional_attributes_json TEXT,
+        updated_at TIMESTAMP
+    )
+    """
+    cursor.execute(create_table_sql)
+
+    # Create the normalized additional attributes table
+    create_attrs_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {table_name}_additional_attrs (
+        product_id VARCHAR,
+        attr_name VARCHAR,
+        attr_value TEXT,
+        PRIMARY KEY (product_id, attr_name)
+    )
+    """
+    cursor.execute(create_attrs_table_sql)
+
+    # Create indexes for better query performance
+    cursor.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_attr_name ON {table_name}_additional_attrs(attr_name)"
+    )
+    cursor.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_attr_value ON {table_name}_additional_attrs(attr_value)"
+    )
+
+    # Begin transaction for faster inserts
+    conn.execute("BEGIN TRANSACTION")
+
+    try:
+        for product in products:
+            # Insert into main products table
+            product_json = json.dumps(product)
+            cursor.execute(
+                f"""
+                INSERT OR REPLACE INTO {table_name} (
+                    product_id, extracted_product, product_group_id, brand_name,
+                    name, description, price, original_price, rating,
+                    rating_count, product_image, variants_json, materials,
+                    genders, age_groups, additional_attributes_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    product.get("id"),
+                    product_json,
+                    product.get("product_group_id"),
+                    product.get("brand_name"),
+                    product.get("name"),
+                    product.get("description"),
+                    product.get("price"),
+                    product.get("original_price"),
+                    product.get("rating"),
+                    product.get("rating_count"),
+                    product.get("product_image"),
+                    json.dumps(product.get("variants", [])),
+                    json.dumps(product.get("materials", [])),
+                    json.dumps(product.get("genders", [])),
+                    json.dumps(product.get("age_groups", [])),
+                    json.dumps(product.get("additional_attributes", {})),
+                    product.get("updated_at"),
+                ),
+            )
+
+            # Insert normalized additional attributes
+            normalized_attrs = normalize_additional_attributes(product)
+            for attr in normalized_attrs:
+                cursor.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {table_name}_additional_attrs 
+                    (product_id, attr_name, attr_value) 
+                    VALUES (?, ?, ?)
+                    """,
+                    (product.get("id"), attr["attr_name"], attr["attr_value"]),
+                )
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

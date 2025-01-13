@@ -415,44 +415,20 @@ async def get_table_analytics(table_name: str):
             FROM {table_name}_extracted
         ),
         additional_attr_stats AS (
-            WITH RECURSIVE cleaned_json AS (
-                SELECT 
-                    CASE 
-                        WHEN additional_attributes_json IS NULL THEN ''
-                        ELSE trim(both '{}' from additional_attributes_json)
-                    END as json_text,
-                    product_id
-                FROM {table_name}_extracted
-                WHERE additional_attributes_json IS NOT NULL
-                    AND additional_attributes_json != 'null'
-                    AND additional_attributes_json != '{}'
-            ),
-            split_pairs AS (
-                SELECT 
-                    trim(both '"' from split_part(value, ':', 1)) as attr_name,
-                    trim(both '"' from split_part(value, ':', 2)) as attr_value,
-                    c.product_id
-                FROM cleaned_json c,
-                     (SELECT unnest(string_to_array(json_text, ',')) as value, product_id 
-                      FROM cleaned_json) as pairs(value, product_id)
-                WHERE value != ''
-            )
             SELECT 
                 attr_name,
-                COUNT(DISTINCT sp.product_id) as occurrence_count,
+                COUNT(DISTINCT product_id) as occurrence_count,
                 COUNT(DISTINCT attr_value) as unique_values,
-                ROUND(100.0 * COUNT(DISTINCT sp.product_id) / (
+                ROUND(100.0 * COUNT(DISTINCT product_id) / (
                     SELECT COUNT(*) 
                     FROM {table_name}_extracted 
                     WHERE additional_attributes_json IS NOT NULL
                 ), 2) as coverage_percentage,
-                array_agg(DISTINCT attr_value) FILTER (WHERE attr_value IS NOT NULL) as value_samples
-            FROM split_pairs sp
-            WHERE attr_name != '' 
-                AND NOT attr_name LIKE 'style%'  -- Exclude all style-related attributes
+                array_agg(DISTINCT attr_value) as value_samples
+            FROM {table_name}_additional_attrs
             GROUP BY attr_name
-            HAVING COUNT(DISTINCT sp.product_id) >= 5
-                AND COUNT(DISTINCT attr_value) > 1  -- Only include attributes with multiple unique values
+            HAVING COUNT(DISTINCT product_id) >= 5
+                AND COUNT(DISTINCT attr_value) > 1
             ORDER BY occurrence_count DESC
         )
     """
