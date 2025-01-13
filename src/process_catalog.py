@@ -10,7 +10,7 @@ from index_catalog import create_whoosh_index
 from load_to_db import load_parquet_files_to_db
 
 # Import functions from existing scripts
-from octogen_catalog import download_catalog
+from download_catalog_files import download_catalog
 
 # Configure logging
 logging.basicConfig(
@@ -58,7 +58,7 @@ async def process_catalog(
             index_dir = f"/tmp/whoosh/{catalog}"
 
         db_path = f"{catalog}_catalog.{db_type}"
-        create_whoosh_index(db_path, index_dir, catalog, batch_size)
+        create_whoosh_index(db_path, index_dir, catalog, batch_size, db_type)
 
         logger.info(f"Successfully processed catalog {catalog}")
 

@@ -78,8 +78,27 @@ async def download_catalog(
     bucket = storage_client.bucket(octogen_catalog_bucket)
     blobs = await asyncify(bucket.list_blobs)(prefix=prefix)
     
-    # Convert to list and filter for .parquet files
+    # Convert to list and filter for .parquet files and snapshots
     blobs = [blob for blob in blobs if blob.name.endswith(".parquet")]
+    
+    # Extract snapshots and find the latest one
+    import re
+    snapshot_pattern = r'snapshot=(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})'
+    snapshot_blobs = [blob for blob in blobs if 'snapshot=' in blob.name]
+    
+    if not snapshot_blobs:
+        logger.error("No snapshot files found in the catalog")
+        return
+    
+    # Find the latest snapshot
+    latest_snapshot = max(
+        re.search(snapshot_pattern, blob.name).group(1)
+        for blob in snapshot_blobs
+    )
+    logger.info(f"Found latest snapshot: {latest_snapshot}")
+    
+    # Filter for only the latest snapshot
+    blobs = [blob for blob in snapshot_blobs if f"snapshot={latest_snapshot}" in blob.name]
     
     # Filter out files that already exist with matching size
     blobs_to_download = []
