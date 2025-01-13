@@ -215,34 +215,35 @@ async def get_table_analytics(table_name: str):
             "requires_duckdb": True
         })
     
-    # Dynamically set threads based on CPU cores
+    # More generous memory settings for a 24GB system
     cpu_count = multiprocessing.cpu_count()
     conn.execute(f"SET threads TO {cpu_count}")
+    conn.execute("SET memory_limit='16GB'")  # Use up to 16GB of your 24GB
+    conn.execute("PRAGMA temp_directory='/tmp'")
     
-    # First part of the query with CTEs
-    ctes_query = f"""
-        WITH product_view AS (
-            SELECT 
-                json_extract_string(extracted_product, '$.id') as id,
-                json_extract_string(extracted_product, '$.brand.name') as brand_name,
-                json_extract_string(extracted_product, '$.image') as product_image,
-                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-                CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
-                CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
-                CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                json_extract_string(extracted_product, '$.materials') as materials,
-                json_extract_string(extracted_product, '$.audience.genders') as genders,
-                json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-                json_extract_string(extracted_product, '$.description') as description,
-                json_extract_string(extracted_product, '$.name') as name
-            FROM {table_name}
-        ),
-    """
+    # Create a view instead of temp table
+    conn.execute(f"""
+        CREATE VIEW IF NOT EXISTS product_view AS
+        SELECT 
+            json_extract_string(extracted_product, '$.id') as id,
+            json_extract_string(extracted_product, '$.brand.name') as brand_name,
+            json_extract_string(extracted_product, '$.image') as product_image,
+            json_extract_string(extracted_product, '$.hasVariant') as variants_json,
+            TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
+            TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
+            TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
+            TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
+            json_extract_string(extracted_product, '$.materials') as materials,
+            json_extract_string(extracted_product, '$.audience.genders') as genders,
+            json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+            json_extract_string(extracted_product, '$.description') as description,
+            json_extract_string(extracted_product, '$.name') as name
+        FROM {table_name}
+    """)
 
-    # Add uniqueness analysis CTE
+    # Define CTEs for analytics
     stats_ctes = """
-        basic_stats AS (
+        WITH basic_stats AS (
             SELECT 
                 COUNT(*) as total_records,
                 COUNT(DISTINCT brand_name) as unique_brands,
@@ -361,17 +362,17 @@ async def get_table_analytics(table_name: str):
                 ROUND(100.0 * COUNT(CASE WHEN product_image IS NULL THEN 1 END) / COUNT(*), 2) as null_product_images_percentage,
                 AVG(CASE 
                     WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    THEN json_array_length(variants_json)
                     ELSE 0 
                 END) as avg_variant_images,
                 MAX(CASE 
                     WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    THEN json_array_length(variants_json)
                     ELSE 0 
                 END) as max_variant_images,
                 MIN(CASE 
                     WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    THEN json_array_length(variants_json)
                     ELSE 0 
                 END) as min_variant_images
             FROM product_view
@@ -459,7 +460,7 @@ async def get_table_analytics(table_name: str):
     """
 
     # Combine all parts
-    analytics_query = ctes_query + stats_ctes + final_select
+    analytics_query = stats_ctes + final_select
 
     # Execute the combined query
     cursor = conn.cursor()
