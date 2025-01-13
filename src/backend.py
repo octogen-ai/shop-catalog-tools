@@ -223,11 +223,12 @@ async def get_table_analytics(table_name: str):
             SELECT 
                 json_extract_string(extracted_product, '$.id') as id,
                 json_extract_string(extracted_product, '$.brand.name') as brand_name,
+                json_extract_string(extracted_product, '$.image') as product_image,
+                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
                 CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
                 CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
                 CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
                 CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
                 json_extract_string(extracted_product, '$.materials') as materials,
                 json_extract_string(extracted_product, '$.audience.genders') as genders,
                 json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
@@ -352,6 +353,27 @@ async def get_table_analytics(table_name: str):
             WHERE genders IS NOT NULL AND age_groups IS NOT NULL
             GROUP BY 1, 2
             ORDER BY product_count DESC
+        ),
+        image_analysis AS (
+            SELECT 
+                COUNT(CASE WHEN product_image IS NULL THEN 1 END) as null_product_images,
+                ROUND(100.0 * COUNT(CASE WHEN product_image IS NULL THEN 1 END) / COUNT(*), 2) as null_product_images_percentage,
+                AVG(CASE 
+                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
+                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    ELSE 0 
+                END) as avg_variant_images,
+                MAX(CASE 
+                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
+                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    ELSE 0 
+                END) as max_variant_images,
+                MIN(CASE 
+                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
+                    THEN json_array_length(json_extract(variants_json, '$[*].images'))
+                    ELSE 0 
+                END) as min_variant_images
+            FROM product_view
         )
     """
 
@@ -363,7 +385,14 @@ async def get_table_analytics(table_name: str):
                 unique_brands := unique_brands,
                 price_completeness := price_completeness,
                 uniqueness_analysis := (SELECT field_uniqueness FROM uniqueness_analysis),
-                null_analysis := (SELECT field_nulls FROM null_analysis)
+                null_analysis := (SELECT field_nulls FROM null_analysis),
+                image_analysis := (SELECT struct_pack(
+                    null_product_images := null_product_images,
+                    null_product_images_percentage := null_product_images_percentage,
+                    avg_variant_images := avg_variant_images,
+                    max_variant_images := max_variant_images,
+                    min_variant_images := min_variant_images
+                ) FROM image_analysis)
             ) FROM basic_stats),
             advanced_analytics := struct_pack(
                 variant_analysis := struct_pack(

@@ -36,6 +36,12 @@
             loadAnalytics();
         }
     }
+
+    $: {
+        if (analytics) {
+            console.log('Analytics response:', analytics);
+        }
+    }
 </script>
 
 <main class="container mx-auto px-4 py-8">
@@ -71,11 +77,11 @@
                 />
                 
                 <AnalyticsCard 
-                    title="Data Completeness" 
-                    value={analytics.basic_analytics.null_analysis?.description?.null_percentage ? 
-                        100 - analytics.basic_analytics.null_analysis.description.null_percentage : 0} 
+                    title="Missing Product Images" 
+                    value={analytics?.basic_analytics?.image_analysis?.null_product_images_percentage } 
                     type="percentage" 
                 />
+                
             </div>
 
             <div class="bg-white rounded-lg shadow p-6 mb-8">
@@ -101,6 +107,38 @@
                                     </tr>
                                 {/each}
                             {/if}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">Image Analysis</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-6 py-3 text-left">Metric</th>
+                                <th class="px-6 py-3 text-left">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-t">
+                                <td class="px-6 py-4">Products Missing Images</td>
+                                <td class="px-6 py-4">{analytics?.basic_analytics?.image_analysis?.null_product_images ?? 0}</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="px-6 py-4">Average Variant Images</td>
+                                <td class="px-6 py-4">{analytics.basic_analytics.image_analysis.avg_variant_images.toFixed(2)}</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="px-6 py-4">Max Variant Images</td>
+                                <td class="px-6 py-4">{analytics.basic_analytics.image_analysis.max_variant_images}</td>
+                            </tr>
+                            <tr class="border-t">
+                                <td class="px-6 py-4">Min Variant Images</td>
+                                <td class="px-6 py-4">{analytics.basic_analytics.image_analysis.min_variant_images}</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
