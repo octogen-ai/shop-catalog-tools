@@ -6,6 +6,7 @@ from whoosh.index import create_in
 from whoosh.fields import Schema, TEXT, ID, KEYWORD, NUMERIC, DATETIME, STORED
 from whoosh.analysis import StemmingAnalyzer
 import sys
+import duckdb
 
 # Add the src directory to the system path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -46,19 +47,23 @@ schema = Schema(
     image_urls=STORED
 )
 
-def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_size: int = 1000):
-    """Create a Whoosh index from SQLite database contents"""
+def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_size: int = 1000, db_type: str = "sqlite"):
+    """Create a Whoosh index from SQLite/DuckDB database contents"""
     if not index_dir:
         index_dir = f"/tmp/whoosh/{table_name}"
     if not db_path:
-        db_path = f"{table_name}_catalog.db"
+        db_path = f"{table_name}_catalog.{db_type}"
     if not os.path.exists(db_path):
         print(f"Database file {db_path} does not exist")
         return
 
-    # Connect to the SQLite database
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    # Connect to the database based on type
+    if db_type == "sqlite":
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+    else:  # duckdb
+        conn = duckdb.connect(db_path)
+        cursor = conn
 
     # Create the index directory if it doesn't exist
     if not os.path.exists(index_dir):
@@ -70,18 +75,28 @@ def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_siz
 
     try:
         # Get total count of rows
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-        total_rows = cursor.fetchone()[0]
+        if db_type == "sqlite":
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            total_rows = cursor.fetchone()[0]
+        else:  # duckdb
+            total_rows = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            
         print(f"Found {total_rows} products to index")
         
         # Process in batches
         for offset in range(0, total_rows, batch_size):
-            cursor.execute(
-                f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?", 
-                (batch_size, offset)
-            )
+            if db_type == "sqlite":
+                cursor.execute(
+                    f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?", 
+                    (batch_size, offset)
+                )
+                rows = cursor.fetchall()
+            else:  # duckdb
+                rows = cursor.execute(
+                    f"SELECT extracted_product FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
+                ).fetchall()
             
-            for row in cursor.fetchall():
+            for row in rows:
                 try:
                     # Parse JSON and create ProductGroup object
                     data = json.loads(row[0])
@@ -138,14 +153,21 @@ def create_whoosh_index(db_path: str, index_dir: str, table_name: str, batch_siz
 
 def main():
     parser = argparse.ArgumentParser(description="Index products using Whoosh")
-    parser.add_argument("--db_path", type=str, help="Path to the SQLite database")
+    parser.add_argument("--db_path", type=str, help="Path to the database")
     parser.add_argument("--index_dir", type=str, help="Directory to store the Whoosh index")
     parser.add_argument("--table_name", type=str, help="Name of the table to index", required=True)
     parser.add_argument("--batch_size", type=int, help="Batch size for indexing", default=1000)
+    parser.add_argument(
+        "--db-type",
+        type=str,
+        choices=["sqlite", "duckdb"],
+        default="sqlite",
+        help="Database type to use (sqlite or duckdb)",
+    )
 
     args = parser.parse_args()
 
-    create_whoosh_index(args.db_path, args.index_dir, args.table_name, args.batch_size)
+    create_whoosh_index(args.db_path, args.index_dir, args.table_name, args.batch_size, args.db_type)
 
 if __name__ == "__main__":
     main()

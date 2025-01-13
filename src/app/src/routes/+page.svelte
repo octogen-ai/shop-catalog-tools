@@ -1,10 +1,8 @@
 <script>
     import { onMount } from 'svelte';
-    import { goto } from '$app/navigation';
 
     onMount(() => {
-        // Redirect to the anntaylor catalog by default
-        goto('/anntaylor');
+        window.location.href = '/anntaylor';
     });
 </script>
 
