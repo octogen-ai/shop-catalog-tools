@@ -20,7 +20,7 @@
     let searchCurrentPage = 1;
     let searchTotalPages = 1;
     let totalProducts = 0;
-    let perListPage = 100;
+    let perListPage = 30;
     let perSearchPage = 9;
     let pageSizeOptions = [100, 200, 300, 400];
     let totalSearchResults = 0;

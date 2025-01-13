@@ -5,9 +5,16 @@ not on Windows.
 
 ## Getting Started
 
-### 1. Install UV
+### 1.A Install UV
 
 Please follow instructions [here](https://docs.astral.sh/uv/getting-started/installation/) for your platform.
+
+
+### 1.B Install Duckdb (for catalog analytics) 
+
+```
+brew install duckdb
+```
 
 ### 2. Setup environment
 
@@ -18,6 +25,7 @@ Please obtain the customer name and service account credentials file from your O
 OCTOGEN_CATALOG_BUCKET_NAME=octogen-catalog-exchange
 OCTOGEN_CUSTOMER_NAME=<octogen-customer-name>
 GOOGLE_APPLICATION_CREDENTIALS=<Path to the Service Account credentials file>
+DB_ENGINE=duckdb
 ```
 
 ### 3. Process the catalog
@@ -27,14 +35,14 @@ You have two options to process a catalog:
 #### Option A: Single Command (Recommended)
 Run all steps (download, load to database, and index) with a single command:
 ```bash
-uv run src/process_catalog.py --catalog anntaylor
-uv run src/process_catalog.py --catalog heydude
-uv run src/process_catalog.py --catalog chairish
+uv run src/process_catalog.py --catalog anntaylor --db-type duckdb
+uv run src/process_catalog.py --catalog heydude --db-type duckdb
+uv run src/process_catalog.py --catalog chairish --db-type duckdb
 ```
 
 This will:
 1. Download the catalog to `/tmp/octogen-catalog-exchange`
-2. Create a SQLite database named `anntaylor_catalog.db` (or a duckdb database named `anntaylor_catalog.duckdb`)
+2. Create a SQLite database named `anntaylor_catalog.db` (or a duckdb database named `anntaylor_catalog.duckdb` for catalog analytics. See addendum for more details)
 3. Create a Whoosh index at `/tmp/whoosh/anntaylor`
 
 You can customize any of these paths:
@@ -110,7 +118,7 @@ uv run src/read_structured_products.py --catalog anntaylor --db_path anntaylor_c
 
 ### 1. DuckDB
 
-If you want to use DuckDB instead of SQLite, you can do so by setting the `DB_ENGINE` environment variable to `duckdb` in your `.env` file.
+To see catalog analytics, you to use DuckDB instead of SQLite, you can do so by setting the `DB_ENGINE` environment variable to `duckdb` in your `.env` file.
 
 You can then specify the database type:
 ```bash

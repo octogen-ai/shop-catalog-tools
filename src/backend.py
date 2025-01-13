@@ -207,354 +207,75 @@ async def get_raw_product(
 @app.get("/api/{table_name}/analytics")
 async def get_table_analytics(table_name: str):
     conn = get_db_connection(table_name)
-    cursor = conn.cursor()
-    
-    # Get total number of records
-    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-    total_records = cursor.fetchone()[0] or 0  # Default to 0 if None
-    
-    # Analysis queries for common fields
-    analytics = {
-        "total_records": total_records,
-        "null_analysis": {},
-        "uniqueness_analysis": {},
-        "value_distributions": {}
-    }
-    
-    # Common fields to analyze based on schema
-    fields_to_check = [
-        # Basic product info
-        'id', 'catalog', 'url', 'name', 'type', 'primary_product_id', 'description', 'gtin',
-        
-        # Price and availability
-        'price_info.price', 'price_info.original_price', 'price_info.currency_code', 'availability',
-        'available_quantity',
-        
-        # Product details
-        'brand.name', 'language_code', 'color_info.colors', 'sizes', 'materials', 'fit', 
-        'dimensions', 'patterns',
-        
-        # Media
-        'image.url', 'images', 'three_d_model',
-        
-        # Ratings and reviews
-        'rating.average_rating', 'rating.rating_count', 'review',
-        
-        # Variant info
-        'productGroupID', 'variesBy', 'hasVariant',
-        
-        # Additional info
-        'additional_attributes', 'tags', 'promotions', 'audience', 'fulfillment_info'
-    ]
-
-    # Modify the null analysis query to handle nested fields
-    for field in fields_to_check:
-        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
-        try:
-            cursor.execute(f"""
-                SELECT COUNT(*) 
-                FROM {table_name} 
-                WHERE json_extract(extracted_product, '{json_path}') IS NULL
-            """)
-            null_count = cursor.fetchone()[0] or 0  # Default to 0 if None
-            analytics["null_analysis"][field] = {
-                "null_count": null_count,
-                "null_percentage": round((null_count / total_records) * 100, 2) if total_records > 0 else 0
-            }
-        except Exception as e:
-            analytics["null_analysis"][field] = {
-                "null_count": 0,
-                "null_percentage": 0
-            }
-
-    # Modify the uniqueness analysis to handle nested fields
-    for field in fields_to_check:
-        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
-        try:
-            cursor.execute(f"""
-                SELECT COUNT(DISTINCT json_extract(extracted_product, '{json_path}'))
-                FROM {table_name}
-                WHERE json_extract(extracted_product, '{json_path}') IS NOT NULL
-            """)
-            unique_count = cursor.fetchone()[0] or 0  # Default to 0 if None
-            analytics["uniqueness_analysis"][field] = {
-                "unique_values": unique_count,
-                "uniqueness_percentage": round((unique_count / total_records) * 100, 2) if total_records > 0 else 0
-            }
-        except Exception as e:
-            analytics["uniqueness_analysis"][field] = {
-                "unique_values": 0,
-                "uniqueness_percentage": 0
-            }
-
-    # Modify categorical fields analysis
-    categorical_fields = [
-        'brand.name', 'availability', 'price_info.currency_code', 
-        'language_code', 'color_info.colors', 'materials', 'patterns',
-        'type', 'audience'
-    ]
-
-    for field in categorical_fields:
-        json_path = field.replace('.', '->')  # Use -> for JSON path in DuckDB
-        try:
-            cursor.execute(f"""
-                SELECT 
-                    COALESCE(json_extract(extracted_product, '{json_path}'), 'null') as value,
-                    COUNT(*) as count
-                FROM {table_name}
-                WHERE json_extract(extracted_product, '{json_path}') IS NOT NULL
-                GROUP BY json_extract(extracted_product, '{json_path}')
-                ORDER BY count DESC
-                LIMIT 10
-            """)
-            distribution = cursor.fetchall()
-            analytics["value_distributions"][field] = [
-                {"value": str(row[0]) if row[0] is not None else "null", "count": row[1] or 0} 
-                for row in distribution
-            ] if distribution else []
-        except Exception as e:
-            analytics["value_distributions"][field] = []
-
-    conn.close()
-    return JSONResponse(analytics)
-
-@app.get("/api/{table_name}/advanced-analytics")
-async def get_advanced_analytics(table_name: str):
-    conn = get_db_connection(table_name)
     
     if not isinstance(conn, duckdb.DuckDBPyConnection):
-        raise HTTPException(
-            status_code=400, 
-            detail="Advanced analytics are only available with DuckDB database engine"
-        )
+        return JSONResponse({
+            "error": "Analytics are only available with DuckDB database engine",
+            "requires_duckdb": True
+        })
     
-    cursor = conn.cursor()
-    analytics = {
-        "variant_analysis": {},
-        "price_distribution": {},
-        "size_availability": {},
-        "color_combinations": {},
-        "discount_analysis": {},
-        "rating_analysis": {},
-        "material_analysis": {},
-        "brand_analysis": {},
-        "audience_analysis": {},
-        "availability_analysis": {}
-    }
-
-    # 1. Discount Analysis
-    cursor.execute(f"""
-        WITH discount_data AS (
+    # Enable parallel processing
+    conn.execute("SET threads TO 8")  # Adjust based on your CPU cores
+    
+    # First part of the query with CTEs
+    ctes_query = f"""
+        WITH product_view AS (
             SELECT 
-                CASE 
-                    WHEN json_extract_string(extracted_product, '$.price_info.original_price') IS NULL THEN 0
-                    ELSE ((CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) - 
-                           CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT)) / 
-                           CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) * 100)
-                END as discount_percentage,
-                CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.price_info.price') IS NOT NULL
-        )
-        SELECT 
-            CASE 
-                WHEN discount_percentage = 0 THEN 'No Discount'
-                WHEN discount_percentage < 25 THEN '1-25%'
-                WHEN discount_percentage < 50 THEN '26-50%'
-                ELSE '50%+'
-            END as discount_range,
-            COUNT(*) as product_count,
-            AVG(rating) as avg_rating
-        FROM discount_data
-        GROUP BY 1
-        ORDER BY 
-            CASE discount_range 
-                WHEN 'No Discount' THEN 1
-                WHEN '1-25%' THEN 2
-                WHEN '26-50%' THEN 3
-                ELSE 4
-            END
-    """)
-    analytics["discount_analysis"]["ranges"] = [
-        {
-            "discount_range": row[0],
-            "product_count": row[1],
-            "avg_rating": round(row[2], 2) if row[2] is not None else None
-        }
-        for row in cursor.fetchall()
-    ]
-
-    # 2. Rating Analysis
-    cursor.execute(f"""
-        WITH rating_data AS (
-            SELECT 
+                json_extract_string(extracted_product, '$.id') as id,
+                json_extract_string(extracted_product, '$.brand.name') as brand_name,
+                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
+                CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
                 CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
-                CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as count,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.rating.average_rating') IS NOT NULL
-        )
-        SELECT 
-            AVG(rating) as avg_rating,
-            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rating) as median_rating,
-            CORR(rating, price) as price_rating_correlation,
-            AVG(count) as avg_review_count,
-            MAX(count) as max_review_count
-        FROM rating_data
-    """)
-    row = cursor.fetchone()
-    analytics["rating_analysis"]["statistics"] = {
-        "average_rating": round(row[0], 2) if row[0] is not None else None,
-        "median_rating": round(row[1], 2) if row[1] is not None else None,
-        "price_rating_correlation": round(row[2], 2) if row[2] is not None else None,
-        "average_review_count": round(row[3], 2) if row[3] is not None else None,
-        "max_review_count": row[4]
-    }
-
-    # 3. Material Analysis
-    cursor.execute(f"""
-        WITH material_data AS (
-            SELECT 
-                unnest(string_to_array(trim(both '[]' from json_extract_string(extracted_product, '$.materials')), ',')) as material,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-                json_extract_string(extracted_product, '$.brand.name') as brand
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.materials') IS NOT NULL
-        )
-        SELECT 
-            material,
-            COUNT(*) as count,
-            AVG(price) as avg_price,
-            LIST(DISTINCT brand) as brands
-        FROM material_data
-        WHERE material IS NOT NULL
-        GROUP BY material
-        ORDER BY count DESC
-        LIMIT 10
-    """)
-    analytics["material_analysis"]["popular_materials"] = [
-        {
-            "name": row[0],
-            "count": row[1],
-            "avg_price": round(row[2], 2),
-            "top_brands": row[3][:5] if row[3] else []  # Limit to top 5 brands
-        }
-        for row in cursor.fetchall()
-    ]
-
-    # 4. Brand Analysis
-    cursor.execute(f"""
-        WITH brand_data AS (
-            SELECT 
-                json_extract_string(extracted_product, '$.brand.name') as brand,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-                CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.brand.name') IS NOT NULL
-        )
-        SELECT 
-            brand,
-            COUNT(*) as product_count,
-            MIN(price) as min_price,
-            MAX(price) as max_price,
-            AVG(price) as avg_price,
-            AVG(rating) as avg_rating
-        FROM brand_data
-        GROUP BY brand
-        HAVING COUNT(*) >= 5
-        ORDER BY product_count DESC
-        LIMIT 10
-    """)
-    analytics["brand_analysis"]["top_brands"] = [
-        {
-            "name": row[0],
-            "product_count": row[1],
-            "price_range": {
-                "min": round(row[2], 2),
-                "max": round(row[3], 2),
-                "avg": round(row[4], 2)
-            },
-            "avg_rating": round(row[5], 2) if row[5] is not None else None
-        }
-        for row in cursor.fetchall()
-    ]
-
-    # 5. Audience Analysis
-    cursor.execute(f"""
-        WITH audience_data AS (
-            SELECT 
-                unnest(string_to_array(trim(both '[]' from json_extract_string(extracted_product, '$.audience.genders')), ',')) as gender,
-                unnest(string_to_array(trim(both '[]' from json_extract_string(extracted_product, '$.audience.age_groups')), ',')) as age_group,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.audience') IS NOT NULL
-        )
-        SELECT 
-            gender,
-            age_group,
-            COUNT(*) as product_count,
-            AVG(price) as avg_price
-        FROM audience_data
-        WHERE gender IS NOT NULL AND age_group IS NOT NULL
-        GROUP BY gender, age_group
-        ORDER BY product_count DESC
-    """)
-    analytics["audience_analysis"]["demographics"] = [
-        {
-            "gender": row[0],
-            "age_group": row[1],
-            "product_count": row[2],
-            "avg_price": round(row[3], 2)
-        }
-        for row in cursor.fetchall()
-    ]
-
-    # Variant Analysis
-    cursor.execute(f"""
-        WITH variant_data AS (
-            SELECT 
+                CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
                 json_extract_string(extracted_product, '$.hasVariant') as variants_json,
-                json_extract_string(extracted_product, '$.price_info.price') as price
+                json_extract_string(extracted_product, '$.materials') as materials,
+                json_extract_string(extracted_product, '$.audience.genders') as genders,
+                json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+                json_extract_string(extracted_product, '$.description') as description,
+                json_extract_string(extracted_product, '$.name') as name
             FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.hasVariant') IS NOT NULL
-                AND json_extract_string(extracted_product, '$.hasVariant') != '[]'
         ),
-        variant_counts AS (
-            SELECT 
-                CASE 
-                    WHEN variants_json IS NULL OR variants_json = '[]' THEN 0
-                    ELSE json_array_length(variants_json)
-                END as variant_count,
-                CAST(price AS FLOAT) as product_price
-            FROM variant_data
-        )
-        SELECT 
-            variant_count,
-            COUNT(*) as product_count,
-            (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM variant_counts))::FLOAT as percentage
-        FROM variant_counts
-        GROUP BY variant_count
-        ORDER BY variant_count
-    """)
-    analytics["variant_analysis"]["variants"] = [
-        {
-            "variant_count": row[0],
-            "product_count": row[1],
-            "percentage": round(row[2], 2)
-        }
-        for row in cursor.fetchall()
-    ]
+    """
 
-    # Additional variant statistics
-    cursor.execute(f"""
-        WITH variant_data AS (
+    # Add uniqueness analysis CTE
+    stats_ctes = """
+        basic_stats AS (
             SELECT 
-                json_extract_string(extracted_product, '$.hasVariant') as variants_json,
-                CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price
-            FROM {table_name}
-            WHERE json_extract_string(extracted_product, '$.hasVariant') IS NOT NULL
-                AND json_extract_string(extracted_product, '$.hasVariant') != '[]'
-                AND json_extract_string(extracted_product, '$.price_info.price') IS NOT NULL
+                COUNT(*) as total_records,
+                COUNT(DISTINCT brand_name) as unique_brands,
+                AVG(CASE WHEN price IS NOT NULL THEN 1 ELSE 0 END) * 100 as price_completeness
+            FROM product_view
+        ),
+        uniqueness_analysis AS (
+            SELECT struct_pack(
+                brand_name := struct_pack(
+                    unique_values := COUNT(DISTINCT brand_name),
+                    total_values := COUNT(brand_name)
+                ),
+                name := struct_pack(
+                    unique_values := COUNT(DISTINCT name),
+                    total_values := COUNT(name)
+                ),
+                description := struct_pack(
+                    unique_values := COUNT(DISTINCT description),
+                    total_values := COUNT(description)
+                )
+            ) as field_uniqueness
+            FROM product_view
+        ),
+        null_analysis AS (
+            SELECT struct_pack(
+                brand_name := struct_pack(
+                    null_percentage := ROUND(100.0 * COUNT(CASE WHEN brand_name IS NULL THEN 1 END) / COUNT(*), 2)
+                ),
+                name := struct_pack(
+                    null_percentage := ROUND(100.0 * COUNT(CASE WHEN name IS NULL THEN 1 END) / COUNT(*), 2)
+                ),
+                description := struct_pack(
+                    null_percentage := ROUND(100.0 * COUNT(CASE WHEN description IS NULL THEN 1 END) / COUNT(*), 2)
+                )
+            ) as field_nulls
+            FROM product_view
         ),
         variant_stats AS (
             SELECT 
@@ -562,24 +283,161 @@ async def get_advanced_analytics(table_name: str):
                     WHEN variants_json IS NULL OR variants_json = '[]' THEN 0
                     ELSE json_array_length(variants_json)
                 END as variant_count,
-                price
-            FROM variant_data
+                COUNT(*) as product_count,
+                ROUND(AVG(price), 2) as avg_price
+            FROM product_view
+            GROUP BY 1
+            ORDER BY product_count DESC
+        ),
+        discount_stats AS (
+            SELECT 
+                CASE 
+                    WHEN original_price IS NULL OR price >= original_price THEN 'No Discount'
+                    WHEN ((original_price - price) / original_price * 100) < 25 THEN '1-25%'
+                    WHEN ((original_price - price) / original_price * 100) < 50 THEN '26-50%'
+                    ELSE '50%+'
+                END as discount_range,
+                COUNT(*) as product_count,
+                ROUND(AVG(rating), 2) as avg_rating
+            FROM product_view
+            GROUP BY 1
+        ),
+        rating_stats AS (
+            SELECT 
+                ROUND(AVG(rating), 2) as avg_rating,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rating), 2) as median_rating,
+                ROUND(CORR(rating, price), 2) as price_rating_correlation,
+                ROUND(AVG(rating_count), 2) as avg_review_count,
+                MAX(rating_count) as max_review_count
+            FROM product_view
+            WHERE rating IS NOT NULL
+        ),
+        material_stats AS (
+            SELECT 
+                m.value as material,
+                COUNT(*) as count,
+                ROUND(AVG(price), 2) as avg_price,
+                array_agg(DISTINCT brand_name) as brands
+            FROM product_view,
+                 UNNEST(string_to_array(trim(both '[]' from materials), ',')) as m(value)
+            WHERE materials IS NOT NULL AND brand_name IS NOT NULL
+            GROUP BY 1
+            ORDER BY count DESC
+            LIMIT 10
+        ),
+        brand_stats AS (
+            SELECT 
+                brand_name,
+                COUNT(*) as product_count,
+                ROUND(MIN(price), 2) as min_price,
+                ROUND(MAX(price), 2) as max_price,
+                ROUND(AVG(price), 2) as avg_price,
+                ROUND(AVG(rating), 2) as avg_rating
+            FROM product_view
+            WHERE brand_name IS NOT NULL
+            GROUP BY 1
+            HAVING COUNT(*) >= 5
+            ORDER BY product_count DESC
+            LIMIT 10
+        ),
+        audience_stats AS (
+            SELECT 
+                g.value as gender,
+                a.value as age_group,
+                COUNT(*) as product_count,
+                ROUND(AVG(price), 2) as avg_price
+            FROM product_view,
+                 UNNEST(string_to_array(trim(both '[]' from genders), ',')) as g(value),
+                 UNNEST(string_to_array(trim(both '[]' from age_groups), ',')) as a(value)
+            WHERE genders IS NOT NULL AND age_groups IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY product_count DESC
         )
-        SELECT
-            AVG(variant_count) as avg_variants,
-            MAX(variant_count) as max_variants,
-            CORR(variant_count, price) as price_variant_correlation,
-            COUNT(*) as total_products_with_variants
-        FROM variant_stats
-        WHERE variant_count > 0
-    """)
-    row = cursor.fetchone()
-    analytics["variant_analysis"]["statistics"] = {
-        "average_variants": round(row[0], 2) if row[0] is not None else None,
-        "max_variants": row[1],
-        "price_variant_correlation": round(row[2], 2) if row[2] is not None else None,
-        "total_products_with_variants": row[3]
-    }
+    """
 
+    # Final select statement
+    final_select = """
+        SELECT struct_pack(
+            basic_analytics := (SELECT struct_pack(
+                total_records := total_records,
+                unique_brands := unique_brands,
+                price_completeness := price_completeness,
+                uniqueness_analysis := (SELECT field_uniqueness FROM uniqueness_analysis),
+                null_analysis := (SELECT field_nulls FROM null_analysis)
+            ) FROM basic_stats),
+            advanced_analytics := struct_pack(
+                variant_analysis := struct_pack(
+                    variants := (SELECT array_agg(struct_pack(
+                        variant_count := variant_count,
+                        product_count := product_count,
+                        avg_price := avg_price
+                    )) FROM variant_stats),
+                    statistics := struct_pack(
+                        avg_variants := (SELECT AVG(variant_count) FROM variant_stats WHERE variant_count > 0),
+                        max_variants := (SELECT MAX(variant_count) FROM variant_stats),
+                        total_products_with_variants := (SELECT SUM(product_count) FROM variant_stats WHERE variant_count > 0)
+                    )
+                ),
+                discount_analysis := struct_pack(
+                    ranges := (SELECT array_agg(struct_pack(
+                        discount_range := discount_range,
+                        product_count := product_count,
+                        avg_rating := avg_rating
+                    )) FROM discount_stats)
+                ),
+                rating_analysis := struct_pack(
+                    statistics := (SELECT struct_pack(
+                        avg_rating := avg_rating,
+                        median_rating := median_rating,
+                        price_rating_correlation := price_rating_correlation,
+                        avg_review_count := avg_review_count,
+                        max_review_count := max_review_count
+                    ) FROM rating_stats)
+                ),
+                material_analysis := struct_pack(
+                    popular_materials := (SELECT array_agg(struct_pack(
+                        material := material,
+                        count := count,
+                        avg_price := avg_price,
+                        brands := brands
+                    )) FROM material_stats)
+                ),
+                brand_analysis := struct_pack(
+                    top_brands := (SELECT array_agg(struct_pack(
+                        name := brand_name,
+                        product_count := product_count,
+                        min_price := min_price,
+                        max_price := max_price,
+                        avg_price := avg_price,
+                        avg_rating := avg_rating
+                    )) FROM brand_stats)
+                ),
+                audience_analysis := CASE 
+                    WHEN (SELECT COUNT(*) FROM audience_stats) > 0 
+                    THEN struct_pack(
+                        demographics := (SELECT array_agg(struct_pack(
+                            gender := gender,
+                            age_group := age_group,
+                            product_count := product_count,
+                            avg_price := avg_price
+                        )) FROM audience_stats)
+                    )
+                    ELSE NULL
+                END
+            )
+        )::json as analytics
+    """
+
+    # Combine all parts
+    analytics_query = ctes_query + stats_ctes + final_select
+
+    # Execute the combined query
+    cursor = conn.cursor()
+    cursor.execute(analytics_query)
+    result = cursor.fetchone()[0]
+    
     conn.close()
-    return JSONResponse(analytics)
+    return JSONResponse({
+        "requires_duckdb": True,
+        **json.loads(result)
+    })
