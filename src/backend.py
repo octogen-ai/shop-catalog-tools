@@ -120,31 +120,35 @@ async def search_products(
 
     ix = open_dir(index_dir)
 
-    # Search across all relevant text fields
+    # Get only searchable fields from the schema (those with a format/analyzer)
     searchable_fields = [
-        "name",
-        "description",
-        "brand_name",
-        "extra_text",
-        "tags",
-        "categories",
-        "materials",
-        "patterns",
-        "colors",
-        "sizes",
+        name
+        for name, field in ix.schema.items()
+        if hasattr(field, "format") and field.format
     ]
+    print(
+        f"Searchable fields: {searchable_fields}"
+    )  # Debug print to see available fields
 
     parser = MultifieldParser(searchable_fields, schema=ix.schema)
     parsed_query = parser.parse(query)
 
     with ix.searcher() as searcher:
-        # Use search_page for pagination
         results = searcher.search_page(parsed_query, page, pagelen=per_page)
         total_count = results.total
-        product_ids = [result["id"] for result in results]
+
+        # Get both ID fields from search results
+        product_ids = []
+        for result in results:
+            if "productGroupID" in result:
+                product_ids.append(result["productGroupID"])
+            elif "id" in result:
+                product_ids.append(result["id"])
+
         print(
             f"Found {total_count} total products, returning page {page} for query: {query}"
         )
+        print(f"Product IDs from search: {product_ids}")  # Debug print
 
     if not product_ids:
         return JSONResponse(
@@ -157,15 +161,23 @@ async def search_products(
             }
         )
 
-    # Get full product data from SQLite
+    # Get full product data from database
     conn = get_db_connection(table_name)
     placeholders = ",".join(["?" for _ in product_ids])
 
     cursor = conn.cursor()
+    # Query using both ID fields with correct column name
     products = cursor.execute(
-        f"SELECT extracted_product FROM {table_name} WHERE json_extract(extracted_product, '$.id') IN ({placeholders})",
-        product_ids,
+        f"""
+        SELECT extracted_product 
+        FROM {table_name} 
+        WHERE json_extract(extracted_product, '$.id') IN ({placeholders})
+        OR product_group_id IN ({placeholders})
+    """,
+        product_ids + product_ids,
     ).fetchall()
+
+    print(f"Found {len(products)} products in database")  # Debug print
 
     conn.close()
 
