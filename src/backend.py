@@ -215,30 +215,38 @@ async def get_table_analytics(table_name: str):
             "requires_duckdb": True
         })
     
-    # More generous memory settings for a 24GB system
+    # Configure DuckDB for external aggregation
     cpu_count = multiprocessing.cpu_count()
-    conn.execute(f"SET threads TO {cpu_count}")
-    conn.execute("SET memory_limit='16GB'")  # Use up to 16GB of your 24GB
-    conn.execute("PRAGMA temp_directory='/tmp'")
+    conn.execute(f"PRAGMA threads={cpu_count}")
+    conn.execute(f"PRAGMA external_threads={max(1, cpu_count - 1)}")  # Leave one thread for system
+    conn.execute("PRAGMA memory_limit='8GB'")  # Reduced to 8GB
+    conn.execute("PRAGMA temp_directory='/tmp'")  # Use disk for temporary storage
     
-    # Create a view instead of temp table
+    # Create a more optimized view
     conn.execute(f"""
         CREATE VIEW IF NOT EXISTS product_view AS
         SELECT 
             json_extract_string(extracted_product, '$.id') as id,
             json_extract_string(extracted_product, '$.brand.name') as brand_name,
-            json_extract_string(extracted_product, '$.image') as product_image,
-            json_extract_string(extracted_product, '$.hasVariant') as variants_json,
+            CASE 
+                WHEN json_extract_string(extracted_product, '$.image') IS NULL THEN NULL
+                ELSE 1  -- We only need to know if image exists, not the actual URL
+            END as has_image,
+            CASE 
+                WHEN json_extract_string(extracted_product, '$.hasVariant') = '[]' THEN 0
+                ELSE json_array_length(json_extract_string(extracted_product, '$.hasVariant'))
+            END as variant_count,
             TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
             TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
             TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
             TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-            json_extract_string(extracted_product, '$.materials') as materials,
-            json_extract_string(extracted_product, '$.audience.genders') as genders,
-            json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-            json_extract_string(extracted_product, '$.description') as description,
+            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.materials')), ',') as materials,
+            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.audience.genders')), ',') as genders,
+            string_split(trim(both '[]' from json_extract_string(extracted_product, '$.audience.age_groups')), ',') as age_groups,
+            length(json_extract_string(extracted_product, '$.description')) > 0 as has_description,
             json_extract_string(extracted_product, '$.name') as name
         FROM {table_name}
+        WHERE json_extract_string(extracted_product, '$.id') IS NOT NULL
     """)
 
     # Define CTEs for analytics
