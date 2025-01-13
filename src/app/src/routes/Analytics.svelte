@@ -342,6 +342,70 @@
                             </div>
                         </div>
                     {/if}
+                    <!-- Add this section after the Audience Analysis section -->
+                    {#if analytics.advanced_analytics?.additional_attributes_analysis.attributes}
+                        <div class="mt-8">
+                            <h3 class="text-lg font-medium mb-3">Additional Attributes Analysis</h3>
+                            
+                            <!-- Overall Statistics Card Row -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                <AnalyticsCard 
+                                    title="Total Custom Attributes" 
+                                    value={analytics.advanced_analytics.additional_attributes_analysis.statistics.total_attributes} 
+                                    type="number" 
+                                />
+                                <AnalyticsCard 
+                                    title="Avg Attributes per Product" 
+                                    value={analytics.advanced_analytics.additional_attributes_analysis.statistics.avg_attributes_per_product} 
+                                    type="number" 
+                                />
+                                <AnalyticsCard 
+                                    title="Products with Attributes" 
+                                    value={analytics.advanced_analytics.additional_attributes_analysis.statistics.products_with_attributes} 
+                                    type="number" 
+                                />
+                            </div>
+
+                            <!-- Attributes Table -->
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full">
+                                    <thead>
+                                        <tr class="bg-gray-50">
+                                            <th class="px-4 py-2 text-left">Attribute Name</th>
+                                            <th class="px-4 py-2 text-left">Occurrence Count</th>
+                                            <th class="px-4 py-2 text-left">Unique Values</th>
+                                            <th class="px-4 py-2 text-left">Coverage %</th>
+                                            <th class="px-4 py-2 text-left">Sample Values</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {#each analytics.advanced_analytics.additional_attributes_analysis.attributes as attr}
+                                            <tr class="border-t">
+                                                <td class="px-4 py-2 font-medium">{attr.name}</td>
+                                                <td class="px-4 py-2">{attr.occurrence_count}</td>
+                                                <td class="px-4 py-2">{attr.unique_values}</td>
+                                                <td class="px-4 py-2">{attr.coverage_percentage}%</td>
+                                                <td class="px-4 py-2">
+                                                    <div class="flex flex-wrap gap-1">
+                                                        {#each attr.value_samples.slice(0, 3) as sample}
+                                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                                                {sample}
+                                                            </span>
+                                                        {/each}
+                                                        {#if attr.value_samples.length > 3}
+                                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                                                                +{attr.value_samples.length - 3} more
+                                                            </span>
+                                                        {/if}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {/each}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
         {/if}

@@ -6,11 +6,10 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from index_catalog import create_whoosh_index
-from load_to_db import load_parquet_files_to_db
-
 # Import functions from existing scripts
 from download_catalog_files import download_catalog
+from index_catalog import create_whoosh_index
+from load_to_db import load_parquet_files_to_db
 
 # Configure logging
 logging.basicConfig(
@@ -99,7 +98,7 @@ async def main() -> None:
         "--db-type",
         type=str,
         choices=["sqlite", "duckdb"],
-        default="sqlite",
+        default="duckdb",
         help="Database type to use (sqlite or duckdb)",
     )
 
