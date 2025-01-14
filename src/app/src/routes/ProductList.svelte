@@ -1,5 +1,5 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import ProductCard from '../components/ProductCard.svelte';
     import Pagination from '../components/Pagination.svelte';
     import CatalogSelector from '../components/CatalogSelector.svelte';
@@ -51,6 +51,36 @@
         await loadProducts(newPage);
     }
 
+    function parseHash() {
+        const hash = window.location.hash.slice(1); // Remove the # character
+        const parts = hash.split(':');
+        if (parts[0] === 'search' && parts.length > 1) {
+            // Rejoin the rest of parts in case the search query itself contains colons
+            return decodeURIComponent(parts.slice(1).join(':'));
+        }
+        return null;
+    }
+
+    function handleHashChange() {
+        const searchTerm = parseHash();
+        if (searchTerm !== null) {
+            searchQuery = searchTerm;
+            handleSearch({ type: 'click' });
+        }
+    }
+
+    onMount(() => {
+        // Handle hash on initial load
+        handleHashChange();
+        // Add hash change listener
+        window.addEventListener('hashchange', handleHashChange);
+    });
+
+    onDestroy(() => {
+        // Clean up listener
+        window.removeEventListener('hashchange', handleHashChange);
+    });
+
     async function handleSearch(event, page = 1) {
         if (event.type === 'keydown' && event.key !== 'Enter') {
             return;
@@ -59,9 +89,16 @@
         if (!searchQuery.trim()) {
             searchResults = [];
             searchAttempted = false;
+            window.location.hash = ''; // Clear hash when search is empty
             return;
         }
+
         isLoadingSearch = true;
+        // Update the URL hash without triggering the hashchange event
+        window.removeEventListener('hashchange', handleHashChange);
+        window.location.hash = `search:${encodeURIComponent(searchQuery)}`;
+        window.addEventListener('hashchange', handleHashChange);
+
         const res = await fetch(`/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perSearchPage}`);
         const data = await res.json();
         searchResults = data.products;
