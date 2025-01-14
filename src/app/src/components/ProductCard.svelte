@@ -4,16 +4,34 @@
     import ReviewList from './ReviewList.svelte';
     import ColorPicker from './ColorPicker.svelte';
     import SizePicker from './SizePicker.svelte';
+    import ImageGallery from './ImageGallery.svelte';
     export let product;
     export let expanded = false;
     export let onToggleExpand = () => {};
   
     // Combine primary image with additional images and remove duplicates
     $: allImages = product.image 
-      ? [product.image, ...product.images].filter((img, index, self) => 
-          index === self.findIndex(t => t.url === img.url)
+      ? [product.image.url, ...(product.images?.map(img => img.url) || [])].filter((url, index, self) => 
+          index === self.findIndex(t => t === url)
         )
-      : product.images;
+      : product.images?.map(img => img.url) || [];
+
+    // New: Collect all unique image URLs from variants
+    $: variantImages = product.hasVariant
+      ? product.hasVariant.reduce((acc, variant) => {
+          if (variant.image?.url) acc.push(variant.image.url);
+          if (variant.images?.length > 0) {
+            variant.images.forEach(img => acc.push(img.url));
+          }
+          return acc;
+        }, [])
+        .filter((url, index, self) => index === self.findIndex(t => t === url))
+      : [];
+
+    // Combine all unique image URLs
+    $: combinedImages = [...allImages, ...variantImages]
+      .filter((url, index, self) => index === self.findIndex(t => t === url))
+      .map(url => ({ url })); // Convert back to object format for template compatibility
 
     let currentImageIndex = 0;
     let selectedColor = null;
@@ -57,7 +75,10 @@
       const allSizes = new Set();
       
       variants.forEach(variant => {
-        const isInStock = variant.offers?.availability === 'http://schema.org/InStock';
+        // First check offers.availability, then fall back to variant.availability if offers doesn't exist
+        const isInStock = variant.offers?.availability !== undefined
+          ? variant.offers.availability === 'http://schema.org/InStock'
+          : variant.availability === 'IN_STOCK';
         
         // Add colors
         if (variant.color_info?.colors) {
@@ -113,10 +134,8 @@
 
     $: {
       if (expanded) {
-        console.log('Adding escape listener'); // Debug log
         document.addEventListener('keydown', handleEscape);
       } else {
-        console.log('Removing escape listener'); // Debug log
         document.removeEventListener('keydown', handleEscape);
       }
     }
@@ -143,14 +162,14 @@
       >
         <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
           <div class="relative">
-            {#if allImages && allImages.length > 0}
+            {#if combinedImages && combinedImages.length > 0}
               <img 
                 in:fade={{ duration: 500 }}
-                src={allImages[currentImageIndex].url} 
+                src={combinedImages[currentImageIndex].url} 
                 alt={product.name} 
                 class="w-full h-64 object-cover"
               />
-              {#if allImages.length > 1}
+              {#if combinedImages.length > 1}
                 <button 
                   class="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full"
                   on:click|stopPropagation={previousImage}
@@ -223,6 +242,12 @@
                   {@const availInfo = getAvailabilityInfo(product.availability)}
                   <p class={availInfo.color}>
                     {availInfo.icon} {availInfo.text}
+                    {#if variants}
+                      <span class="text-sm text-gray-600">
+                        ({variants.inStockColors.length + variants.inStockSizes.length} in stock, 
+                        {variants.outOfStockColors.length + variants.outOfStockSizes.length} out of stock)
+                      </span>
+                    {/if}
                   </p>
                 {/if}
               </div>
@@ -294,29 +319,22 @@
                       {@const availInfo = getAvailabilityInfo(product.availability)}
                       <p class={`mt-2 ${availInfo.color}`}>
                         {availInfo.icon} {availInfo.text}
+                        {#if variants}
+                          <span class="text-sm text-gray-600">
+                            ({variants.inStockColors.length + variants.inStockSizes.length} in stock, 
+                            {variants.outOfStockColors.length + variants.outOfStockSizes.length} out of stock)
+                          </span>
+                        {/if}
                       </p>
                     {/if}
                   </div>
 
                   <!-- Image gallery -->
-                  <div class="mt-8 lg:col-span-7 lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:mt-0">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-3 lg:gap-8">
-                      {#if allImages && allImages.length > 0}
-                        <img 
-                          src={allImages[currentImageIndex].url}
-                          alt={product.name}
-                          class="rounded-lg lg:col-span-2 lg:row-span-2"
-                        />
-                        {#each allImages as image}
-                          <img 
-                            src={image.url}
-                            alt={product.name}
-                            class="hidden rounded-lg lg:block"
-                          />
-                        {/each}
-                      {/if}
-                    </div>
-                  </div>
+                  <ImageGallery 
+                    images={combinedImages}
+                    currentIndex={currentImageIndex}
+                    productName={product.name}
+                  />
 
                   <!-- Product details -->
                   <div class="mt-8 lg:col-span-5">
