@@ -2,7 +2,6 @@
     import { onMount } from 'svelte';
     import ProductCard from '../../components/ProductCard.svelte';
     import ProductGrid from '../../components/ProductGrid.svelte';
-    import SearchBar from '../../components/SearchBar.svelte';
     // Get table name from URL path, similar to ProductList.svelte
     $: tableName = window.location.pathname.split('/')[1] || 'anntaylor';
     
