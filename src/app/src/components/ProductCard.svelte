@@ -2,6 +2,8 @@
     import { fade } from 'svelte/transition';
     import RatingDisplay from './RatingDisplay.svelte';
     import ReviewList from './ReviewList.svelte';
+    import ColorPicker from './ColorPicker.svelte';
+    import SizePicker from './SizePicker.svelte';
     export let product;
     export let expanded = false;
     export let onToggleExpand = () => {};
@@ -14,6 +16,13 @@
       : product.images;
 
     let currentImageIndex = 0;
+    let selectedColor = null;
+    let selectedSize = null;
+    
+    // Add this computed property to define variants
+    $: variants = product.hasVariant 
+      ? Object.values(groupVariantsByImage(product.hasVariant))[0]
+      : null;
 
     function nextImage() {
       currentImageIndex = (currentImageIndex + 1) % allImages.length;
@@ -41,22 +50,45 @@
 
     // Helper function to group variants by image URL
     function groupVariantsByImage(variants) {
+      // Collect all colors and sizes, and track which are in stock
+      const inStockColors = new Set();
+      const inStockSizes = new Set();
+      const allColors = new Set();
+      const allSizes = new Set();
+      
+      variants.forEach(variant => {
+        const isInStock = variant.offers?.availability === 'http://schema.org/InStock';
+        
+        // Add colors
+        if (variant.color_info?.colors) {
+          variant.color_info.colors.forEach(color => {
+            allColors.add(color);
+            if (isInStock) inStockColors.add(color);
+          });
+        }
+        
+        // Add sizes
+        if (variant.sizes) {
+          variant.sizes.forEach(size => {
+            allSizes.add(size);
+            if (isInStock) inStockSizes.add(size);
+          });
+        }
+      });
+
+      const outOfStockColors = Array.from(allColors).filter(c => !inStockColors.has(c));
+      const outOfStockSizes = Array.from(allSizes).filter(s => !inStockSizes.has(s));
+      
       return variants.reduce((acc, variant) => {
         const imageUrl = variant.image?.url;
         if (!acc[imageUrl]) {
           acc[imageUrl] = {
             ...variant,
-            colors: variant.color_info?.colors || [],
-            sizes: variant.sizes || [],
+            inStockColors: Array.from(inStockColors),
+            outOfStockColors,
+            inStockSizes: Array.from(inStockSizes),
+            outOfStockSizes,
           };
-        } else {
-          // Merge colors and sizes
-          if (variant.color_info?.colors) {
-            acc[imageUrl].colors = [...new Set([...acc[imageUrl].colors, ...variant.color_info.colors])];
-          }
-          if (variant.sizes) {
-            acc[imageUrl].sizes = [...new Set([...acc[imageUrl].sizes, ...variant.sizes])];
-          }
         }
         return acc;
       }, {});
@@ -87,6 +119,16 @@
         console.log('Removing escape listener'); // Debug log
         document.removeEventListener('keydown', handleEscape);
       }
+    }
+
+    function handleColorSelect(color) {
+      selectedColor = color;
+      // Add any additional logic needed when color changes
+    }
+    
+    function handleSizeSelect(size) {
+      selectedSize = size;
+      // Add any additional logic needed when size changes
     }
   </script>
   
@@ -181,11 +223,6 @@
                   {@const availInfo = getAvailabilityInfo(product.availability)}
                   <p class={availInfo.color}>
                     {availInfo.icon} {availInfo.text}
-                  </p>
-                {/if}
-                {#if product.hasVariant?.length}
-                  <p class="text-sm text-blue-600 mt-2">
-                    {product.hasVariant.length} variants available
                   </p>
                 {/if}
               </div>
@@ -284,110 +321,126 @@
                   <!-- Product details -->
                   <div class="mt-8 lg:col-span-5">
                     {#if product.hasVariant}
-                      <!-- Color picker -->
-                      {#if Object.values(groupVariantsByImage(product.hasVariant))[0]?.colors?.length}
-                        <div>
-                          <h2 class="text-sm font-medium text-gray-900">Color</h2>
-                          <fieldset aria-label="Choose a color" class="mt-2">
-                            <div class="flex items-center gap-x-3">
-                              {#each Object.values(groupVariantsByImage(product.hasVariant))[0].colors as color}
-                                <label 
-                                  aria-label={color}
-                                  class="relative -m-0.5 flex cursor-pointer items-center justify-center rounded-full p-0.5 ring-gray-900 focus:outline-none"
-                                >
-                                  <input type="radio" name="color-choice" value={color} class="sr-only">
-                                  <span aria-hidden="true" class="size-8 rounded-full border border-black/10 bg-gray-900"></span>
-                                </label>
-                              {/each}
-                            </div>
-                          </fieldset>
+                      <!-- Color and Size Pickers -->
+                      <div class="mt-4 flex flex-wrap gap-4">
+                        <!-- In-stock colors -->
+                        {#if variants?.inStockColors?.length}
+                          <div class="w-full">
+                            <ColorPicker 
+                              colors={variants.inStockColors}
+                              selectedColor={selectedColor}
+                              onColorSelect={handleColorSelect}
+                              title="In-Stock Colors"
+                            />
+                          </div>
+                        {/if}
+
+                        <!-- Out-of-stock colors -->
+                        {#if variants?.outOfStockColors?.length}
+                          <div class="w-full">
+                            <ColorPicker 
+                              colors={variants.outOfStockColors}
+                              selectedColor={selectedColor}
+                              onColorSelect={handleColorSelect}
+                              title="Out of Stock Colors"
+                              disabled={true}
+                            />
+                          </div>
+                        {/if}
+
+                        <!-- In-stock sizes -->
+                        {#if variants?.inStockSizes?.length}
+                          <div class="w-full">
+                            <SizePicker 
+                              sizes={variants.inStockSizes}
+                              selectedSize={selectedSize}
+                              onSizeSelect={handleSizeSelect}
+                              title="In-Stock Sizes"
+                            />
+                          </div>
+                        {/if}
+
+                        <!-- Out-of-stock sizes -->
+                        {#if variants?.outOfStockSizes?.length}
+                          <div class="w-full">
+                            <SizePicker 
+                              sizes={variants.outOfStockSizes}
+                              selectedSize={selectedSize}
+                              onSizeSelect={handleSizeSelect}
+                              title="Out of Stock Sizes"
+                              disabled={true}
+                            />
+                          </div>
+                        {/if}
+                      </div>
+
+                      <!-- Description -->
+                      {#if product.description}
+                        <div class="mt-10">
+                          <h2 class="text-sm font-medium text-gray-900">Description</h2>
+                          <div class="mt-4 space-y-4 text-sm/6 text-gray-500">
+                            <p>{product.description}</p>
+                          </div>
                         </div>
                       {/if}
 
-                      <!-- Size picker -->
-                      {#if Object.values(groupVariantsByImage(product.hasVariant))[0]?.sizes?.length}
-                        <div class="mt-8">
-                          <h2 class="text-sm font-medium text-gray-900">Size</h2>
-                          <fieldset aria-label="Choose a size" class="mt-2">
-                            <div class="grid grid-cols-3 gap-3 sm:grid-cols-6">
-                              {#each Object.values(groupVariantsByImage(product.hasVariant))[0].sizes as size}
-                                <label class="flex cursor-pointer items-center justify-center rounded-md border px-3 py-3 text-sm font-medium uppercase focus:outline-none sm:flex-1">
-                                  <input type="radio" name="size-choice" value={size} class="sr-only">
-                                  <span>{size}</span>
-                                </label>
+                      <!-- Materials -->
+                      {#if product.materials && product.materials.length > 0}
+                        <div class="mt-8 border-t border-gray-200 pt-8">
+                          <h2 class="text-sm font-medium text-gray-900">Materials</h2>
+                          <div class="mt-4">
+                            <ul role="list" class="list-disc space-y-1 pl-5 text-sm/6 text-gray-500 marker:text-gray-300">
+                              {#each product.materials as material}
+                                <li class="pl-2">{material}</li>
                               {/each}
-                            </div>
-                          </fieldset>
+                            </ul>
+                          </div>
                         </div>
                       {/if}
-                    {/if}
 
-                    <!-- Description -->
-                    {#if product.description}
-                      <div class="mt-10">
-                        <h2 class="text-sm font-medium text-gray-900">Description</h2>
-                        <div class="mt-4 space-y-4 text-sm/6 text-gray-500">
-                          <p>{product.description}</p>
+                      <!-- Additional Attributes -->
+                      {#if product.additional_attributes}
+                        <div class="mt-8 border-t border-gray-200 pt-8">
+                          <h2 class="text-sm font-medium text-gray-900">Additional Details</h2>
+                          <div class="mt-4">
+                            <dl class="divide-y divide-gray-100">
+                              {#each Object.entries(product.additional_attributes) as [key, value]}
+                                {#if value !== null}
+                                  <div class="px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
+                                    <dt class="text-sm font-medium text-gray-900 capitalize">{key}</dt>
+                                    <dd class="mt-1 text-sm text-gray-500 sm:col-span-2 sm:mt-0">
+                                      {#if typeof value === 'object' && value.text}
+                                        <ul class="list-disc pl-5">
+                                          {#each value.text as item}
+                                            <li>{item}</li>
+                                          {/each}
+                                        </ul>
+                                      {:else if typeof value === 'object'}
+                                        {JSON.stringify(value)}
+                                      {:else}
+                                        {value}
+                                      {/if}
+                                    </dd>
+                                  </div>
+                                {/if}
+                              {/each}
+                            </dl>
+                          </div>
                         </div>
-                      </div>
-                    {/if}
+                      {/if}
 
-                    <!-- Materials -->
-                    {#if product.materials && product.materials.length > 0}
-                      <div class="mt-8 border-t border-gray-200 pt-8">
-                        <h2 class="text-sm font-medium text-gray-900">Materials</h2>
-                        <div class="mt-4">
-                          <ul role="list" class="list-disc space-y-1 pl-5 text-sm/6 text-gray-500 marker:text-gray-300">
-                            {#each product.materials as material}
-                              <li class="pl-2">{material}</li>
-                            {/each}
-                          </ul>
+                      <!-- Customer Reviews -->
+                      {#if product.review && product.review.length > 0}
+                        <div class="mt-8 border-t border-gray-200 pt-8">
+                          <div class="flex items-center justify-between">
+                            <h2 class="text-sm font-medium text-gray-900">Customer Reviews</h2>
+                            <span class="text-sm text-gray-500">{product.review.length} reviews</span>
+                          </div>
+                          <div class="mt-4">
+                            <ReviewList reviews={product.review} />
+                          </div>
                         </div>
-                      </div>
-                    {/if}
-
-                    <!-- Additional Attributes -->
-                    {#if product.additional_attributes}
-                      <div class="mt-8 border-t border-gray-200 pt-8">
-                        <h2 class="text-sm font-medium text-gray-900">Additional Details</h2>
-                        <div class="mt-4">
-                          <dl class="divide-y divide-gray-100">
-                            {#each Object.entries(product.additional_attributes) as [key, value]}
-                              {#if value !== null}
-                                <div class="px-2 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
-                                  <dt class="text-sm font-medium text-gray-900 capitalize">{key}</dt>
-                                  <dd class="mt-1 text-sm text-gray-500 sm:col-span-2 sm:mt-0">
-                                    {#if typeof value === 'object' && value.text}
-                                      <ul class="list-disc pl-5">
-                                        {#each value.text as item}
-                                          <li>{item}</li>
-                                        {/each}
-                                      </ul>
-                                    {:else if typeof value === 'object'}
-                                      {JSON.stringify(value)}
-                                    {:else}
-                                      {value}
-                                    {/if}
-                                  </dd>
-                                </div>
-                              {/if}
-                            {/each}
-                          </dl>
-                        </div>
-                      </div>
-                    {/if}
-
-                    <!-- Customer Reviews -->
-                    {#if product.review && product.review.length > 0}
-                      <div class="mt-8 border-t border-gray-200 pt-8">
-                        <div class="flex items-center justify-between">
-                          <h2 class="text-sm font-medium text-gray-900">Customer Reviews</h2>
-                          <span class="text-sm text-gray-500">{product.review.length} reviews</span>
-                        </div>
-                        <div class="mt-4">
-                          <ReviewList reviews={product.review} />
-                        </div>
-                      </div>
+                      {/if}
                     {/if}
                   </div>
                 </div>

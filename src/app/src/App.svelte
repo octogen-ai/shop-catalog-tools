@@ -1,5 +1,5 @@
 <script>
-    import { Router, Link, Route } from "svelte-routing";
+    import { Router, Link, Route, navigate } from "svelte-routing";
     import { onMount } from 'svelte';
     import CatalogSelector from "./components/CatalogSelector.svelte";
     import ProductList from "./routes/ProductList.svelte";
@@ -8,7 +8,11 @@
     export let url = "";
     let currentCatalog = window.location.pathname.split('/')[1] || 'anntaylor';
     let currentPath = window.location.pathname;
-    let isAnalyticsPage;
+
+    $: {
+        currentPath = window.location.pathname;
+        console.log('Path updated:', currentPath);
+    }
 
     onMount(() => {
         // Handle root path redirect
@@ -16,7 +20,6 @@
             window.location.href = '/anntaylor';
             return;
         }
-        isAnalyticsPage = window.location.pathname.includes('analytics');
     });
 
     function handleCatalogChange(event) {
@@ -29,9 +32,11 @@
         }
     }
 
-    function handleNavigate(isAnalytics) {
-        isAnalyticsPage = isAnalytics;
-        currentPath = window.location.pathname;
+
+    function handleNavigate(path, e) {
+        e.preventDefault();
+        navigate(path);
+        currentPath = path;
     }
 </script>
 
@@ -43,15 +48,15 @@
                     <div class="flex space-x-4">
                         <Link 
                             to="/{currentCatalog}" 
-                            class="rounded-md px-3 py-2 text-sm font-medium {!isAnalyticsPage ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
-                            on:click={() => handleNavigate(false)}
+                            class="rounded-md px-3 py-2 text-sm font-medium {currentPath == `/${currentCatalog}` ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
+                            on:click={(e) => handleNavigate(`/${currentCatalog}`, e)}
                         >
                             Products
                         </Link>
                         <Link 
                             to="/{currentCatalog}/analytics" 
-                            class="rounded-md px-3 py-2 text-sm font-medium {isAnalyticsPage ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
-                            on:click={() => handleNavigate(true)}
+                            class="rounded-md px-3 py-2 text-sm font-medium { currentPath == `/${currentCatalog}/analytics` ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
+                            on:click={(e) => handleNavigate(`/${currentCatalog}/analytics`, e)}
                         >
                             Analytics
                         </Link>
