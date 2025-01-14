@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import sqlite3
 import sys
 
 import duckdb
@@ -50,28 +49,19 @@ schema = Schema(
 
 
 def create_whoosh_index(
-    db_path: str,
-    index_dir: str,
-    table_name: str,
-    batch_size: int = 1000,
-    db_type: str = "sqlite",
+    db_path: str, index_dir: str, table_name: str, batch_size: int = 1000
 ):
-    """Create a Whoosh index from SQLite/DuckDB database contents"""
+    """Create a Whoosh index from DuckDB database contents"""
     if not index_dir:
         index_dir = f"/tmp/whoosh/{table_name}"
     if not db_path:
-        db_path = f"{table_name}_catalog.{db_type}"
+        db_path = f"{table_name}_catalog.duckdb"
     if not os.path.exists(db_path):
         print(f"Database file {db_path} does not exist")
         return
 
-    # Connect to the database based on type
-    if db_type == "sqlite":
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-    else:  # duckdb
-        conn = duckdb.connect(db_path)
-        cursor = conn
+    conn = duckdb.connect(db_path)
+    cursor = conn
 
     # Create the index directory if it doesn't exist
     if not os.path.exists(index_dir):
@@ -83,28 +73,15 @@ def create_whoosh_index(
 
     try:
         # Get total count of rows
-        if db_type == "sqlite":
-            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-            total_rows = cursor.fetchone()[0]
-        else:  # duckdb
-            total_rows = cursor.execute(
-                f"SELECT COUNT(*) FROM {table_name}"
-            ).fetchone()[0]
+        total_rows = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
         print(f"Found {total_rows} products to index")
 
         # Process in batches
         for offset in range(0, total_rows, batch_size):
-            if db_type == "sqlite":
-                cursor.execute(
-                    f"SELECT extracted_product FROM {table_name} LIMIT ? OFFSET ?",
-                    (batch_size, offset),
-                )
-                rows = cursor.fetchall()
-            else:  # duckdb
-                rows = cursor.execute(
-                    f"SELECT extracted_product FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
-                ).fetchall()
+            rows = cursor.execute(
+                f"SELECT extracted_product FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
+            ).fetchall()
 
             for row in rows:
                 try:
@@ -196,14 +173,6 @@ def main():
     parser.add_argument(
         "--batch_size", type=int, help="Batch size for indexing", default=1000
     )
-    parser.add_argument(
-        "--db-type",
-        type=str,
-        choices=["sqlite", "duckdb"],
-        default="sqlite",
-        help="Database type to use (sqlite or duckdb)",
-    )
-
     args = parser.parse_args()
 
     create_whoosh_index(

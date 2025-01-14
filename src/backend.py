@@ -2,9 +2,7 @@ import json
 import math
 import multiprocessing
 import os
-import sqlite3
 from pathlib import Path
-from typing import Union
 
 import duckdb
 import yaml
@@ -23,37 +21,17 @@ app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app
 
 
 # Database connection
-def get_db_connection(
-    table_name: str,
-) -> Union[sqlite3.Connection, duckdb.DuckDBPyConnection]:
-    load_dotenv()
-    db_engine = os.getenv("DB_ENGINE", "sqlite").lower()
-
-    if db_engine == "duckdb":
-        db_path = os.path.join(
-            os.path.dirname(__file__), "..", f"{table_name}_catalog.duckdb"
+def get_db_connection(table_name: str) -> duckdb.DuckDBPyConnection:
+    """Get a DuckDB database connection."""
+    db_path = os.path.join(
+        os.path.dirname(__file__), "..", f"{table_name}_catalog.duckdb"
+    )
+    if not os.path.exists(db_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Database {table_name}_catalog.duckdb not found",
         )
-        if not os.path.exists(db_path):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Database {table_name}_catalog.duckdb not found",
-            )
-        return duckdb.connect(db_path)
-    else:  # sqlite. Can either be .db or .sqlite (to be backkwards compatible.)
-        db_path = os.path.join(
-            os.path.dirname(__file__), "..", f"{table_name}_catalog.db"
-        )
-        if not os.path.exists(db_path):
-            db_path = os.path.join(
-                os.path.dirname(__file__), "..", f"{table_name}_catalog.sqlite"
-            )
-        if not os.path.exists(db_path):
-            raise HTTPException(
-                status_code=404, detail=f"Database {table_name}_catalog.db not found"
-            )
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    return duckdb.connect(db_path)
 
 
 # Add to imports at top
@@ -568,19 +546,11 @@ async def get_table_analytics(table_name: str):
 @app.get("/api/catalogs")
 async def get_catalogs():
     load_dotenv()
-    db_engine = os.getenv("DB_ENGINE", "sqlite").lower()
     base_dir = os.path.join(os.path.dirname(__file__), "..")
-
-    extension = "duckdb" if db_engine == "duckdb" else "sqlite"
-    alt_extension = "db" if extension == "sqlite" else None
-
+    extension = "duckdb"
     catalogs = []
     for file in os.listdir(base_dir):
         if file.endswith(f"_catalog.{extension}"):
             catalog = file.replace(f"_catalog.{extension}", "")
             catalogs.append(catalog)
-        elif alt_extension and file.endswith(f"_catalog.{alt_extension}"):
-            catalog = file.replace(f"_catalog.{alt_extension}", "")
-            catalogs.append(catalog)
-
     return JSONResponse({"catalogs": sorted(list(set(catalogs)))})
