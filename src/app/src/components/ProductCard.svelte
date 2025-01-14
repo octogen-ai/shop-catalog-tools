@@ -211,7 +211,7 @@
                   </a>
                 {/if}
                 <a
-                  href={`/api/${product.catalog}/product/${product.id}/raw?format=tree`}
+                  href={`/api/${product.catalog}/product/${product.productGroupID}/raw?format=tree`}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="text-gray-500 hover:text-gray-700"

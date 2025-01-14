@@ -1,10 +1,6 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import ProductCard from '../components/ProductCard.svelte';
     import ProductGrid from '../components/ProductGrid.svelte';
-    import Pagination from '../components/Pagination.svelte';
-    // import CatalogSelector from '../components/CatalogSelector.svelte';
-    import ProductCardSkeleton from '../components/ProductCardSkeleton.svelte';
     import SearchBar from '../components/SearchBar.svelte';
     import { toTitleCase } from '../utils.js';
     
