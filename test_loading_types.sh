@@ -4,7 +4,7 @@
 set -e
 
 echo "Loading data from local extraction into Duckdb..."
-uv run src/process_catalog.py --catalog anntaylor --local --download /tmp/octogen.extractor
+uv run src/process_catalog.py --catalog anntaylor --local --download /tmp/octogen.extractor/anntaylor
 mv anntaylor_catalog.duckdb anntaylor_catalog.duckdb.extractor
 echo "✓ First test complete"
 
@@ -14,7 +14,7 @@ mv anntaylor_catalog.duckdb anntaylor_catalog.duckdb.gcs
 echo "✓ Second tests complete"
 
 echo "Loading data from octogendb dump into Duckdb..."
-uv run src/process_catalog.py --catalog anntaylor --local --download /tmp/octogendb-downloader
+uv run src/process_catalog.py --catalog anntaylor --local --download /tmp/octogendb-downloader/catalog=anntaylor
 mv anntaylor_catalog.duckdb anntaylor_catalog.duckdb.octogendb
 echo "✓ Third tests complete"
 
