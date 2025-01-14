@@ -77,8 +77,9 @@
                 
                 <AnalyticsCard 
                     title="Missing Product Images" 
-                    value={analytics?.basic_analytics?.image_analysis?.null_product_images_percentage } 
-                    type="percentage" 
+                    value={analytics?.basic_analytics?.image_analysis?.null_product_images_percentage}
+                    type="percentage"
+                    href={`/${tableName}#filter:product_image:is_null`}
                 />
                 
             </div>
@@ -99,7 +100,14 @@
                                 {#each Object.entries(analytics.basic_analytics.null_analysis) as [field, analysis]}
                                     <tr class="border-t">
                                         <td class="px-6 py-4">{field}</td>
-                                        <td class="px-6 py-4">{analysis.null_percentage}%</td>
+                                        <td class="px-6 py-4">
+                                            <a 
+                                                href={`/${tableName}#filter:${field}:is_null`} 
+                                                class="text-blue-600 hover:shadow-lg cursor-pointer transition-all duration-200"
+                                            >
+                                                {analysis.null_percentage}%
+                                            </a>
+                                        </td>
                                         <td class="px-6 py-4">
                                             {analytics.basic_analytics.uniqueness_analysis[field]?.unique_values ?? 'N/A'}
                                         </td>

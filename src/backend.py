@@ -649,3 +649,88 @@ async def get_catalogs():
             catalog = file.replace(f"_catalog.{extension}", "")
             catalogs.append(catalog)
     return JSONResponse({"catalogs": sorted(list(set(catalogs)))})
+
+
+@app.get("/api/{table_name}/filter")
+async def filter_products(
+    table_name: str,
+    filter_string: str,  # Changed from separate field/operator parameters
+    page: int = 1,
+    per_page: int = 12,
+):
+    """Filter products based on field conditions using direct SQL queries.
+
+    Args:
+        table_name (str): Name of the catalog to filter
+        filter_string (str): Combined filter string (e.g., "rating>3" or "rating:is_null")
+        page (int, optional): Page number. Defaults to 1.
+        per_page (int, optional): Number of items per page. Defaults to 12.
+    """
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+
+    # Parse the filter string
+    if ":" in filter_string:
+        # Handle is_null/not_null cases
+        field, operator = filter_string.split(":")
+        if operator in ["is_null", "not_null"]:
+            where_clause = (
+                f"{field} IS {'NULL' if operator == 'is_null' else 'NOT NULL'}"
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Invalid operator format")
+    else:
+        # Handle numeric comparisons
+        import re
+
+        match = re.match(r"(\w+)([<>]=?|=)(.+)", filter_string)
+        if not match:
+            raise HTTPException(status_code=400, detail="Invalid filter format")
+
+        field, comp_operator, value = match.groups()
+        try:
+            # Validate numeric value
+            float(value)
+            where_clause = f"{field} {comp_operator} {value}"
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid numeric value")
+
+    # Get total count using the extracted table
+    count_query = f"""
+        SELECT COUNT(*) 
+        FROM {table_name}_extracted
+        WHERE {where_clause}
+    """
+    cursor.execute(count_query)
+    total_count = cursor.fetchone()[0]
+
+    # Get paginated results
+    query = f"""
+        SELECT extracted_product
+        FROM {table_name}_extracted
+        WHERE {where_clause}
+        LIMIT ? OFFSET ?
+    """
+    cursor.execute(query, (per_page, (page - 1) * per_page))
+    products = cursor.fetchall()
+
+    valid_products = []
+    for row in products:
+        try:
+            product_data = json.loads(row[0])
+            valid_products.append(product_data)
+        except json.JSONDecodeError:
+            print(f"Skipping invalid JSON product: {row[0]}")
+            continue
+
+    conn.close()
+
+    return JSONResponse(
+        {
+            "products": valid_products,
+            "total": total_count,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": math.ceil(total_count / per_page),
+        }
+    )
