@@ -2,9 +2,7 @@ import json
 import math
 import multiprocessing
 import os
-import sqlite3
 from pathlib import Path
-from typing import Union
 
 import duckdb
 import yaml
@@ -23,37 +21,27 @@ app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app
 
 
 # Database connection
-def get_db_connection(
-    table_name: str,
-) -> Union[sqlite3.Connection, duckdb.DuckDBPyConnection]:
-    load_dotenv()
-    db_engine = os.getenv("DB_ENGINE", "sqlite").lower()
+def get_db_connection(table_name: str) -> duckdb.DuckDBPyConnection:
+    """Get a DuckDB database connection.
 
-    if db_engine == "duckdb":
-        db_path = os.path.join(
-            os.path.dirname(__file__), "..", f"{table_name}_catalog.duckdb"
+    Args:
+        table_name (str): Name of the table/catalog to connect to
+
+    Returns:
+        duckdb.DuckDBPyConnection: Database connection object
+
+    Raises:
+        HTTPException: If database file is not found
+    """
+    db_path = os.path.join(
+        os.path.dirname(__file__), "..", f"{table_name}_catalog.duckdb"
+    )
+    if not os.path.exists(db_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Database {table_name}_catalog.duckdb not found",
         )
-        if not os.path.exists(db_path):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Database {table_name}_catalog.duckdb not found",
-            )
-        return duckdb.connect(db_path)
-    else:  # sqlite. Can either be .db or .sqlite (to be backkwards compatible.)
-        db_path = os.path.join(
-            os.path.dirname(__file__), "..", f"{table_name}_catalog.db"
-        )
-        if not os.path.exists(db_path):
-            db_path = os.path.join(
-                os.path.dirname(__file__), "..", f"{table_name}_catalog.sqlite"
-            )
-        if not os.path.exists(db_path):
-            raise HTTPException(
-                status_code=404, detail=f"Database {table_name}_catalog.db not found"
-            )
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    return duckdb.connect(db_path)
 
 
 # Add to imports at top
@@ -62,11 +50,26 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @app.get("/")
 async def root():
+    """Serve the main application page.
+
+    Returns:
+        FileResponse: The main index.html file
+    """
     return FileResponse("src/app/dist/index.html")
 
 
 @app.get("/api/{table_name}/products")
 async def get_products(table_name: str, page: int = 1, per_page: int = 12):
+    """Get paginated products from the specified catalog.
+
+    Args:
+        table_name (str): Name of the catalog/table to query
+        page (int, optional): Page number. Defaults to 1.
+        per_page (int, optional): Number of items per page. Defaults to 12.
+
+    Returns:
+        JSONResponse: Paginated products with metadata
+    """
     conn = get_db_connection(table_name)
     cursor = conn.cursor()
 
@@ -111,6 +114,20 @@ async def get_products(table_name: str, page: int = 1, per_page: int = 12):
 async def search_products(
     table_name: str, query: str, page: int = 1, per_page: int = 12
 ):
+    """Search products in the specified catalog using Whoosh index.
+
+    Args:
+        table_name (str): Name of the catalog to search
+        query (str): Search query string
+        page (int, optional): Page number. Defaults to 1.
+        per_page (int, optional): Number of items per page. Defaults to 12.
+
+    Returns:
+        JSONResponse: Search results with pagination metadata
+
+    Raises:
+        HTTPException: If search index is not found
+    """
     # Open Whoosh index
     index_dir = f"/tmp/whoosh/{table_name}"
     if not os.path.exists(index_dir):
@@ -200,6 +217,14 @@ async def search_products(
 
 
 def format_yaml_as_html(yaml_str: str) -> str:
+    """Convert YAML string to HTML format with styling.
+
+    Args:
+        yaml_str (str): YAML formatted string
+
+    Returns:
+        str: HTML formatted string with styling for attributes and URLs
+    """
     lines = yaml_str.split("\n")
     processed_lines = []
 
@@ -226,6 +251,20 @@ def format_yaml_as_html(yaml_str: str) -> str:
 async def get_raw_product(
     request: Request, table: str, product_id: str, format: str = "json"
 ):
+    """Get raw product data in specified format.
+
+    Args:
+        request (Request): FastAPI request object
+        table (str): Catalog/table name
+        product_id (str): Product identifier
+        format (str, optional): Output format (json/yaml/tree). Defaults to "json".
+
+    Returns:
+        TemplateResponse: Rendered template with product data
+
+    Raises:
+        HTTPException: If product is not found
+    """
     conn = get_db_connection(table)
     cursor = conn.cursor()
 
@@ -261,6 +300,15 @@ async def get_raw_product(
 
 @app.get("/api/{table_name}/analytics")
 async def get_table_analytics(table_name: str):
+    """Generate comprehensive analytics for the specified catalog.
+
+    Args:
+        table_name (str): Name of the catalog to analyze
+
+    Returns:
+        JSONResponse: Detailed analytics including basic stats, variants,
+                     discounts, ratings, materials, brands, and audience analysis
+    """
     conn = get_db_connection(table_name)
 
     if not isinstance(conn, duckdb.DuckDBPyConnection):
@@ -567,20 +615,17 @@ async def get_table_analytics(table_name: str):
 
 @app.get("/api/catalogs")
 async def get_catalogs():
+    """Get list of available catalogs.
+
+    Returns:
+        JSONResponse: List of available catalog names
+    """
     load_dotenv()
-    db_engine = os.getenv("DB_ENGINE", "sqlite").lower()
     base_dir = os.path.join(os.path.dirname(__file__), "..")
-
-    extension = "duckdb" if db_engine == "duckdb" else "sqlite"
-    alt_extension = "db" if extension == "sqlite" else None
-
+    extension = "duckdb"
     catalogs = []
     for file in os.listdir(base_dir):
         if file.endswith(f"_catalog.{extension}"):
             catalog = file.replace(f"_catalog.{extension}", "")
             catalogs.append(catalog)
-        elif alt_extension and file.endswith(f"_catalog.{alt_extension}"):
-            catalog = file.replace(f"_catalog.{alt_extension}", "")
-            catalogs.append(catalog)
-
     return JSONResponse({"catalogs": sorted(list(set(catalogs)))})

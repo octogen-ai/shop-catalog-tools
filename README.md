@@ -35,14 +35,14 @@ You have two options to process a catalog:
 #### Option A: Single Command (Recommended)
 Run all steps (download, load to database, and index) with a single command:
 ```bash
-uv run src/process_catalog.py --catalog anntaylor --db-type duckdb
-uv run src/process_catalog.py --catalog heydude --db-type duckdb
-uv run src/process_catalog.py --catalog chairish --db-type duckdb
+uv run src/process_catalog.py --catalog anntaylor
+uv run src/process_catalog.py --catalog heydude
+uv run src/process_catalog.py --catalog chairish
 ```
 
 This will:
 1. Download the catalog to `/tmp/octogen-catalog-exchange`
-2. Create a SQLite database named `anntaylor_catalog.db` (or a duckdb database named `anntaylor_catalog.duckdb` for catalog analytics. See addendum for more details)
+2. Create a Duckdb database named `anntaylor_catalog.duckdb` 
 3. Create a Whoosh index at `/tmp/whoosh/anntaylor`
 
 You can customize any of these paths:

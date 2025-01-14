@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 from dotenv import load_dotenv
+from utils import get_catalog_db_path
 
 # Import functions from existing scripts
 from download_catalog_files import download_catalog
@@ -24,7 +25,6 @@ async def process_catalog(
     index_dir: Optional[str] = None,
     batch_size: int = 1000,
     read_from_local_files: bool = False,
-    db_type: str = "duckdb",
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     try:
@@ -48,16 +48,16 @@ async def process_catalog(
             )
 
         # Step 2: Load to database
-        logger.info(f"Step 2: Loading catalog {catalog} to {db_type} database")
-        load_parquet_files_to_db(download_to, catalog, db_type)
+        logger.info(f"Step 2: Loading catalog {catalog} to DuckDB database")
+        load_parquet_files_to_db(download_to, catalog)
 
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
         if not index_dir:
             index_dir = f"/tmp/whoosh/{catalog}"
 
-        db_path = f"{catalog}_catalog.{db_type}"
-        create_whoosh_index(db_path, index_dir, catalog, batch_size, db_type)
+        db_path = get_catalog_db_path(catalog, raise_if_not_found=False)
+        create_whoosh_index(db_path, index_dir, catalog, batch_size)
 
         logger.info(f"Successfully processed catalog {catalog}")
 
@@ -94,13 +94,6 @@ async def main() -> None:
         default=False,
         help="Read catalog from local files instead of downloading from GCS",
     )
-    parser.add_argument(
-        "--db-type",
-        type=str,
-        choices=["sqlite", "duckdb"],
-        default="duckdb",
-        help="Database type to use (sqlite or duckdb)",
-    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -130,7 +123,6 @@ async def main() -> None:
         index_dir=args.index_dir,
         batch_size=args.batch_size,
         read_from_local_files=args.local,
-        db_type=args.db_type,
     )
 
 

@@ -4,12 +4,13 @@ import glob
 import json
 import logging
 import os
-import sqlite3
 
 import duckdb
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+
+from utils import get_catalog_db_path
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -70,112 +71,6 @@ def create_nested_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return new_df
-
-
-def load_to_sqlite(
-    conn: sqlite3.Connection,
-    parquet_files: list[str],
-    table_name: str,
-    is_flattened: bool = False,
-) -> tuple[int, int]:
-    """Load parquet files into SQLite database."""
-    total_products = 0
-    duplicates_skipped = 0
-
-    if parquet_files:
-        # Create table with first file
-        first_df = pd.read_parquet(parquet_files[0])
-        if is_flattened:
-            first_df = create_nested_dataframe(first_df)
-        first_df.to_sql(table_name, conn, if_exists="replace", index=False)
-
-        cursor = conn.cursor()
-        initial_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[
-            0
-        ]
-        total_products += initial_count
-        logger.info(
-            f"Created table {table_name} with schema from first file ({initial_count} products)"
-        )
-
-        # Create a temporary table for the product group IDs
-        cursor.execute(f"""
-            CREATE TABLE IF NOT EXISTS {table_name}_group_ids AS
-            SELECT DISTINCT json_extract(extracted_product, '$.productGroupID') as product_group_id
-            FROM {table_name}
-            WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
-        """)
-        conn.commit()
-
-        # Append remaining files
-        for parquet_file in parquet_files[1:]:
-            logger.info(f"Loading {parquet_file} into table {table_name}")
-            try:
-                df = pd.read_parquet(parquet_file)
-                if is_flattened:
-                    df = create_nested_dataframe(df)
-
-                # Count total records in the new file
-                file_total = len(df)
-
-                # Use temporary table for deduplication
-                temp_table = f"{table_name}_temp"
-                df.to_sql(temp_table, conn, if_exists="replace", index=False)
-
-                # Get count before insertion
-                pre_count = cursor.execute(
-                    f"SELECT COUNT(*) FROM {table_name}"
-                ).fetchone()[0]
-
-                # Insert non-duplicate records
-                cursor.execute(f"""
-                    INSERT INTO {table_name}
-                    SELECT t.*
-                    FROM {temp_table} t
-                    WHERE NOT EXISTS (
-                        SELECT 1 
-                        FROM {table_name}_group_ids g
-                        WHERE g.product_group_id = json_extract(t.extracted_product, '$.productGroupID')
-                    )
-                """)
-
-                # Get count after insertion
-                post_count = cursor.execute(
-                    f"SELECT COUNT(*) FROM {table_name}"
-                ).fetchone()[0]
-                inserted = post_count - pre_count
-                duplicates_skipped += file_total - inserted
-
-                # Update group IDs table
-                cursor.execute(f"""
-                    INSERT INTO {table_name}_group_ids
-                    SELECT DISTINCT json_extract(extracted_product, '$.productGroupID') as product_group_id
-                    FROM {temp_table}
-                    WHERE json_extract(extracted_product, '$.productGroupID') IS NOT NULL
-                    AND product_group_id NOT IN (SELECT product_group_id FROM {table_name}_group_ids)
-                """)
-
-                # Drop temporary table
-                cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
-                conn.commit()
-
-                total_products += inserted
-                logger.info(
-                    f"Successfully loaded {inserted} rows into {table_name} ({file_total - inserted} duplicates skipped)"
-                )
-            except sqlite3.IntegrityError as e:
-                duplicates_skipped += 1
-                logger.warning(
-                    f"Skipped duplicate product group in {parquet_file}: {str(e)}"
-                )
-            except Exception as e:
-                logger.error(f"Error loading {parquet_file}: {str(e)}")
-
-        # Clean up
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name}_group_ids")
-        conn.commit()
-
-    return total_products, duplicates_skipped
 
 
 def load_to_duckdb(
@@ -387,19 +282,13 @@ def load_to_duckdb(
 def load_parquet_files_to_db(
     download_path: str,
     catalog: str,
-    db_type: str = "sqlite",
 ) -> None:
-    """Load all parquet files from the download path into a SQLite or DuckDB database."""
-    db_path = os.path.join(
-        os.path.dirname(__file__), "..", f"{catalog}_catalog.{db_type}"
-    )
+    """Load all parquet files from the download path into a DuckDB database."""
+    db_path = get_catalog_db_path(catalog)
     logger.info(f"Loading parquet files from {download_path} into {db_path}")
 
     # Connect to database based on type
-    if db_type == "sqlite":
-        conn = sqlite3.connect(db_path)
-    else:  # duckdb
-        conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
+    conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
 
     table_name = os.path.splitext(catalog)[0].replace(os.sep, "_")
     parquet_files = glob.glob(
@@ -415,16 +304,11 @@ def load_parquet_files_to_db(
                 f"Detected {'flattened' if is_flattened else 'nested'} data format"
             )
 
-        if db_type == "sqlite":
-            total_products, duplicates_skipped = load_to_sqlite(
-                conn, parquet_files, table_name, is_flattened
-            )
-        else:  # duckdb
-            total_products, duplicates_skipped = load_to_duckdb(
-                conn, parquet_files, table_name, is_flattened
-            )
+        total_products, duplicates_skipped = load_to_duckdb(
+            conn, parquet_files, table_name, is_flattened
+        )
 
-        logger.info(f"Finished loading all parquet files to {db_type} database.")
+        logger.info("Finished loading all parquet files to DuckDB database.")
         logger.info(f"Total products loaded: {total_products}")
         logger.info(f"Duplicate products skipped: {duplicates_skipped}")
     finally:
@@ -432,9 +316,7 @@ def load_parquet_files_to_db(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Load Octogen catalog data to SQLite or DuckDB"
-    )
+    parser = argparse.ArgumentParser(description="Load Octogen catalog data to DuckDB")
     parser.add_argument(
         "--catalog",
         type=str,
@@ -447,14 +329,6 @@ def main() -> None:
         help="Path to the downloaded parquet files",
         required=True,
     )
-    parser.add_argument(
-        "--db-type",
-        type=str,
-        choices=["sqlite", "duckdb"],
-        default="sqlite",
-        help="Database type to use (sqlite or duckdb)",
-    )
-
     args = parser.parse_args()
 
     if not os.path.exists(args.download):
@@ -510,12 +384,8 @@ def normalize_additional_attributes(product_data):
 # Modify the load_data function to create and populate the additional attributes table
 def load_data(db_path: str, table_name: str, products: list):
     """Load product data into the database with a normalized additional attributes table."""
-    is_duckdb = db_path.endswith(".duckdb")
 
-    if is_duckdb:
-        conn = duckdb.connect(db_path)
-    else:
-        conn = sqlite3.connect(db_path)
+    conn = duckdb.connect(db_path)
 
     cursor = conn.cursor()
 
