@@ -1,5 +1,5 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import ProductCard from '../components/ProductCard.svelte';
     import Pagination from '../components/Pagination.svelte';
     import CatalogSelector from '../components/CatalogSelector.svelte';
@@ -27,6 +27,7 @@
     let searchAttempted = false;
     let isLoadingProducts = false;
     let isLoadingSearch = false;
+    let errorMessage = '';
 
     // Make loadProducts reactive to tableName changes
     $: {
@@ -51,6 +52,37 @@
         await loadProducts(newPage);
     }
 
+    function parseHash() {
+        const hash = window.location.hash.slice(1); // Remove the # character
+        const parts = hash.split(':');
+        if (parts[0] === 'search' && parts.length > 1) {
+            // Rejoin the rest of parts in case the search query itself contains colons
+            return decodeURIComponent(parts.slice(1).join(':'));
+        }
+        return null;
+    }
+
+    function handleHashChange() {
+        const hash = decodeURIComponent(window.location.hash.slice(1));
+        if (hash) {
+            searchQuery = hash;
+            handleSearch({ type: 'hashchange' });
+        } else {
+            searchQuery = '';
+            searchResults = [];
+            searchAttempted = false;
+        }
+    }
+
+    onMount(() => {
+        // Handle initial hash if present
+        if (window.location.hash) {
+            handleHashChange();
+        }
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    });
+
     async function handleSearch(event, page = 1) {
         if (event.type === 'keydown' && event.key !== 'Enter') {
             return;
@@ -59,15 +91,61 @@
         if (!searchQuery.trim()) {
             searchResults = [];
             searchAttempted = false;
+            window.location.hash = '';
             return;
         }
+
         isLoadingSearch = true;
-        const res = await fetch(`/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perSearchPage}`);
-        const data = await res.json();
-        searchResults = data.products;
-        totalSearchResults = data.total;
-        searchTotalPages = data.total_pages;
-        searchCurrentPage = data.page;
+        errorMessage = ''; // Clear any previous error
+        window.removeEventListener('hashchange', handleHashChange);
+        
+        try {
+            // Check if this is a filter query
+            if (searchQuery.startsWith('filter:')) {
+                const [_, ...rest] = searchQuery.split(':');
+                const filter_string = rest.join(':');
+                const res = await fetch(
+                    `/api/${tableName}/filter?` + 
+                    new URLSearchParams({
+                        filter_string: filter_string,
+                        page: page.toString(),
+                        per_page: perSearchPage.toString()
+                    })
+                );
+                
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.detail || 'Failed to filter products');
+                }
+
+                const data = await res.json();
+                searchResults = data.products;
+                totalSearchResults = data.total;
+                searchTotalPages = data.total_pages;
+                searchCurrentPage = data.page;
+            } else {
+                // Regular search query
+                const res = await fetch(
+                    `/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perSearchPage}`
+                );
+                const data = await res.json();
+                searchResults = data.products;
+                totalSearchResults = data.total;
+                searchTotalPages = data.total_pages;
+                searchCurrentPage = data.page;
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+            errorMessage = error.message || 'An error occurred while searching';
+            searchResults = [];
+            totalSearchResults = 0;
+            searchTotalPages = 0;
+        }
+        
+        if (event.type !== 'hashchange') {
+            window.location.hash = encodeURIComponent(searchQuery);
+        }
+        window.addEventListener('hashchange', handleHashChange);
         isLoadingSearch = false;
         searchAttempted = true;
     }
@@ -153,6 +231,23 @@
         <p class="text-gray-600 mb-8">Searching...</p>
     {:else if searchAttempted && searchQuery}
         <p class="text-gray-600 mb-8">No results found for "{searchQuery}"</p>
+    {/if}
+
+    {#if errorMessage}
+        <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-8">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-red-700">
+                        {errorMessage}
+                    </p>
+                </div>
+            </div>
+        </div>
     {/if}
 
     <!-- All products section -->
