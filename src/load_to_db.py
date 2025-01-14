@@ -235,27 +235,35 @@ def load_to_duckdb(
                     f"SELECT COUNT(*) FROM {table_name}"
                 ).fetchone()[0]
 
-                # Insert non-duplicate records into both tables
+                # Modified insertion logic to handle duplicates gracefully
                 conn.execute(f"""
+                    BEGIN TRANSACTION;
+                    
+                    -- Insert into extracted table
                     INSERT INTO {table_name}_extracted
                     SELECT t.* 
-                    FROM temp_products t
+                    FROM (
+                        SELECT DISTINCT ON (product_group_id) *
+                        FROM temp_products
+                        ORDER BY product_group_id, extracted_product
+                    ) t
                     WHERE NOT EXISTS (
                         SELECT 1 
                         FROM {table_name}_extracted m 
                         WHERE m.product_group_id = t.product_group_id
-                    )
-                """)
+                    );
 
-                conn.execute(f"""
+                    -- Insert into main table
                     INSERT INTO {table_name}
-                    SELECT product_group_id, extracted_product
+                    SELECT DISTINCT product_group_id, extracted_product
                     FROM temp_products t
                     WHERE NOT EXISTS (
                         SELECT 1 
                         FROM {table_name} m 
                         WHERE m.product_group_id = t.product_group_id
-                    )
+                    );
+                    
+                    COMMIT;
                 """)
 
                 # Count records after insertion
