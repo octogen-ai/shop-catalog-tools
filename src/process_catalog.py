@@ -5,12 +5,12 @@ import os
 from typing import Optional
 
 from dotenv import load_dotenv
-from utils import get_catalog_db_path
 
 # Import functions from existing scripts
 from download_catalog_files import download_catalog
 from index_catalog import create_whoosh_index
 from load_to_db import load_parquet_files_to_db
+from utils import get_catalog_db_path
 
 # Configure logging
 logging.basicConfig(
@@ -27,19 +27,16 @@ async def process_catalog(
     read_from_local_files: bool = False,
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
+    octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
+    octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
     try:
         # Step 1: Download catalog
         if read_from_local_files:
-            logger.info(f"Step 1: Reading catalog {catalog} from local files")
+            logger.info(
+                f"Step 1: Reading catalog {catalog} from local files in {download_to}"
+            )
         else:
             logger.info(f"Step 1: Downloading catalog {catalog}")
-            octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
-            octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
-
-            if octogen_customer_name not in download_to:
-                download_to = os.path.join(
-                    download_to, octogen_customer_name, f"catalog={catalog}"
-                )
             await download_catalog(
                 octogen_catalog_bucket=octogen_catalog_bucket,
                 octogen_customer_name=octogen_customer_name,
@@ -49,14 +46,15 @@ async def process_catalog(
 
         # Step 2: Load to database
         logger.info(f"Step 2: Loading catalog {catalog} to DuckDB database")
-        load_parquet_files_to_db(download_to, catalog)
+        db_path = get_catalog_db_path(catalog, raise_if_not_found=False)
+        logger.debug(f"Using database path: {db_path}")
+        load_parquet_files_to_db(download_to, catalog, create_if_missing=True)
 
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
         if not index_dir:
             index_dir = f"/tmp/whoosh/{catalog}"
 
-        db_path = get_catalog_db_path(catalog, raise_if_not_found=False)
         create_whoosh_index(db_path, index_dir, catalog, batch_size)
 
         logger.info(f"Successfully processed catalog {catalog}")
@@ -104,12 +102,7 @@ async def main() -> None:
         return
 
     download_to: str = args.download
-    if args.local:
-        if not download_to.endswith(f"/{args.catalog}") or not download_to.endswith(
-            f"/{args.catalog}/"
-        ):
-            download_to = os.path.join(download_to, f"{args.catalog}")
-    else:
+    if not args.local:
         octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
 
         if octogen_customer_name not in download_to:

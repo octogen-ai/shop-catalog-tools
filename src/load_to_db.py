@@ -282,10 +282,12 @@ def load_to_duckdb(
 def load_parquet_files_to_db(
     download_path: str,
     catalog: str,
+    create_if_missing: bool = False,
 ) -> None:
-    """Load all parquet files from the download path into a DuckDB database."""
-    db_path = get_catalog_db_path(catalog)
-    logger.info(f"Loading parquet files from {download_path} into {db_path}")
+    """Load parquet files into DuckDB database."""
+    logger.info(f"Loading parquet files from {download_path} for catalog {catalog}")
+    db_path = get_catalog_db_path(catalog, raise_if_not_found=not create_if_missing)
+    logger.debug(f"Using database path: {db_path}")
 
     # Connect to database based on type
     conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
@@ -297,12 +299,13 @@ def load_parquet_files_to_db(
 
     try:
         # Read first file to determine if data is flattened
-        if parquet_files:
-            first_df = pd.read_parquet(parquet_files[0])
-            is_flattened = is_data_flattened(first_df)
-            logger.info(
-                f"Detected {'flattened' if is_flattened else 'nested'} data format"
-            )
+        if not parquet_files:
+            logger.error(f"No parquet files found in {download_path}")
+            return
+
+        first_df = pd.read_parquet(parquet_files[0])
+        is_flattened = is_data_flattened(first_df)
+        logger.info(f"Detected {'flattened' if is_flattened else 'nested'} data format")
 
         total_products, duplicates_skipped = load_to_duckdb(
             conn, parquet_files, table_name, is_flattened
@@ -379,114 +382,6 @@ def normalize_additional_attributes(product_data):
         return normalized_attrs
     except (json.JSONDecodeError, AttributeError):
         return []
-
-
-# Modify the load_data function to create and populate the additional attributes table
-def load_data(db_path: str, table_name: str, products: list):
-    """Load product data into the database with a normalized additional attributes table."""
-
-    conn = duckdb.connect(db_path)
-
-    cursor = conn.cursor()
-
-    # Create the main products table
-    create_table_sql = f"""
-    CREATE TABLE IF NOT EXISTS {table_name} (
-        product_id VARCHAR PRIMARY KEY,
-        extracted_product TEXT,
-        product_group_id VARCHAR,
-        brand_name VARCHAR,
-        name VARCHAR,
-        description TEXT,
-        price DECIMAL,
-        original_price DECIMAL,
-        rating DECIMAL,
-        rating_count INTEGER,
-        product_image VARCHAR,
-        variants_json TEXT,
-        materials TEXT,
-        genders TEXT,
-        age_groups TEXT,
-        additional_attributes_json TEXT,
-        updated_at TIMESTAMP
-    )
-    """
-    cursor.execute(create_table_sql)
-
-    # Create the normalized additional attributes table
-    create_attrs_table_sql = f"""
-    CREATE TABLE IF NOT EXISTS {table_name}_additional_attrs (
-        product_id VARCHAR,
-        attr_name VARCHAR,
-        attr_value TEXT,
-        PRIMARY KEY (product_id, attr_name)
-    )
-    """
-    cursor.execute(create_attrs_table_sql)
-
-    # Create indexes for better query performance
-    cursor.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_attr_name ON {table_name}_additional_attrs(attr_name)"
-    )
-    cursor.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{table_name}_attr_value ON {table_name}_additional_attrs(attr_value)"
-    )
-
-    # Begin transaction for faster inserts
-    conn.execute("BEGIN TRANSACTION")
-
-    try:
-        for product in products:
-            # Insert into main products table
-            product_json = json.dumps(product)
-            cursor.execute(
-                f"""
-                INSERT OR REPLACE INTO {table_name} (
-                    product_id, extracted_product, product_group_id, brand_name,
-                    name, description, price, original_price, rating,
-                    rating_count, product_image, variants_json, materials,
-                    genders, age_groups, additional_attributes_json, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    product.get("id"),
-                    product_json,
-                    product.get("product_group_id"),
-                    product.get("brand_name"),
-                    product.get("name"),
-                    product.get("description"),
-                    product.get("price"),
-                    product.get("original_price"),
-                    product.get("rating"),
-                    product.get("rating_count"),
-                    product.get("product_image"),
-                    json.dumps(product.get("variants", [])),
-                    json.dumps(product.get("materials", [])),
-                    json.dumps(product.get("genders", [])),
-                    json.dumps(product.get("age_groups", [])),
-                    json.dumps(product.get("additional_attributes", {})),
-                    product.get("updated_at"),
-                ),
-            )
-
-            # Insert normalized additional attributes
-            normalized_attrs = normalize_additional_attributes(product)
-            for attr in normalized_attrs:
-                cursor.execute(
-                    f"""
-                    INSERT OR REPLACE INTO {table_name}_additional_attrs 
-                    (product_id, attr_name, attr_value) 
-                    VALUES (?, ?, ?)
-                    """,
-                    (product.get("id"), attr["attr_name"], attr["attr_value"]),
-                )
-
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":
