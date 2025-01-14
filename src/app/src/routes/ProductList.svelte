@@ -1,9 +1,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import ProductCard from '../components/ProductCard.svelte';
-    import Pagination from '../components/Pagination.svelte';
-    import CatalogSelector from '../components/CatalogSelector.svelte';
-    import ProductCardSkeleton from '../components/ProductCardSkeleton.svelte';
+    import ProductGrid from '../components/ProductGrid.svelte';
+    import SearchBar from '../components/SearchBar.svelte';
     import { toTitleCase } from '../utils.js';
     
     // Get table name from URL path
@@ -161,7 +159,7 @@
     }
 
     async function handlePageSizeChange(event) {
-        perListPage = parseInt(event.target.value);
+        perListPage = event.detail;
         await loadProducts(1);
     }
 </script>
@@ -171,62 +169,26 @@
         {toTitleCase(tableName)} Product Catalog
     </h1>
     
-    <div class="mb-8">
-        <div class="flex gap-2">
-            <input
-                type="text"
-                bind:value={searchQuery}
-                placeholder="Search products..."
-                class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                on:keydown={handleSearch}
-            />
-            <button
-                on:click={handleSearch}
-                class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={searching}
-            >
-                {searching ? 'Searching...' : 'Search'}
-            </button>
-        </div>
-    </div>
+    <SearchBar
+        bind:value={searchQuery}
+        isLoading={isLoadingSearch}
+        on:search={handleSearch}
+    />
 
     {#if searchQuery && (searchResults.length > 0 || isLoadingSearch)}
         <!-- Search results section -->
-        <div class="mb-8">
-            <div class="mt-6">
-                <Pagination 
-                    currentPage={searchCurrentPage}
-                    totalPages={searchTotalPages}
-                    on:pageChange={handleSearchPageChange}
-                />
-            </div>
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-semibold">Search Results</h2>
-                <span class="text-gray-600">Found {totalSearchResults} products</span>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {#if isLoadingSearch}
-                    {#each Array(perSearchPage) as _}
-                        <ProductCardSkeleton />
-                    {/each}
-                {:else}
-                    {#each searchResults as product}
-                        <ProductCard 
-                            {product} 
-                            expanded={expandedProductId === product.id}
-                            onToggleExpand={handleToggleExpand}
-                        />
-                    {/each}
-                {/if}
-            </div>
-            <div class="mt-6">
-                <Pagination 
-                    currentPage={searchCurrentPage}
-                    totalPages={searchTotalPages}
-                    on:pageChange={handleSearchPageChange}
-                />
-            </div>
-        </div>
+        <ProductGrid
+        products={searchResults}
+        isLoading={isLoadingSearch}
+        itemsPerPage={perSearchPage}
+        currentPage={searchCurrentPage}
+        totalPages={searchTotalPages}
+        totalItems={totalSearchResults}
+        title="Search Results"
+        bind:expandedProductId
+        on:pageChange={handleSearchPageChange}
+        showPageSizeSelector={false}
+    />
     {:else if searching}
         <p class="text-gray-600 mb-8">Searching...</p>
     {:else if searchAttempted && searchQuery}
@@ -250,53 +212,17 @@
         </div>
     {/if}
 
-    <!-- All products section -->
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-semibold">All Products</h2>
-        <span class="text-gray-600">Total: {totalProducts} products</span>
-    </div>
-
-    <div class="mb-6">
-        <Pagination 
-            currentPage={currentPage}
-            totalPages={totalPages}
-            on:pageChange={handlePageChange}
-        />
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {#if isLoadingProducts}
-            {#each Array(perListPage) as _}
-                <ProductCardSkeleton />
-            {/each}
-        {:else}
-            {#each products as product}
-                <ProductCard 
-                    {product} 
-                    expanded={expandedProductId === product.id}
-                    onToggleExpand={handleToggleExpand}
-                />
-            {/each}
-        {/if}
-    </div>
-
-    <div class="mt-6">
-        <Pagination 
-            currentPage={currentPage}
-            totalPages={totalPages}
-            on:pageChange={handlePageChange}
-        />
-    </div>
-
-    <div class="flex justify-end mb-4">
-        <select 
-            value={perListPage} 
-            on:change={handlePageSizeChange}
-            class="px-3 py-1 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-            {#each pageSizeOptions as size}
-                <option value={size}>{size} per page</option>
-            {/each}
-        </select>
-    </div>
+    <ProductGrid
+        products={products}
+        isLoading={isLoadingProducts}
+        itemsPerPage={perListPage}
+        currentPage={currentPage}
+        {totalPages}
+        totalItems={totalProducts}
+        title="All Products"
+        bind:expandedProductId
+        on:pageChange={handlePageChange}
+        on:pageSizeChange={(e) => handlePageSizeChange(e)}
+        pageSizeOptions={[100, 200, 300, 400]}
+    />
 </div> 

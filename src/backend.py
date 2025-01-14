@@ -267,9 +267,9 @@ def format_yaml_as_html(yaml_str: str) -> str:
     return "<pre>" + "\n".join(processed_lines) + "</pre>"
 
 
-@app.get("/api/{table}/product/{product_id}/raw")
+@app.get("/api/{table}/product/{product_group_id}/raw")
 async def get_raw_product(
-    request: Request, table: str, product_id: str, format: str = "json"
+    request: Request, table: str, product_group_id: str, format: str = "json"
 ):
     """Get raw product data in specified format.
 
@@ -290,7 +290,7 @@ async def get_raw_product(
 
     cursor.execute(
         f"SELECT extracted_product FROM {table} WHERE product_group_id = ?",
-        (product_id,),
+        (product_group_id,),
     )
     result = cursor.fetchone()
     conn.close()
