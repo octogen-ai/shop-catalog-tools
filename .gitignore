@@ -172,6 +172,7 @@ cython_debug/
 *.duckdb
 *.sqlite
 *.db
+*.mjs
 *catalog.duckdb*
 *.json
 google_credentials.json
