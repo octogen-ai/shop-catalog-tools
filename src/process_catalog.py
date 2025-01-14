@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import glob
 import logging
 import os
 from typing import Optional
@@ -32,6 +33,19 @@ async def process_catalog(
     try:
         # Step 1: Download catalog
         if read_from_local_files:
+            # Ensure download_to ends with catalog={catalog}
+            expected_catalog_suffix = f"catalog={catalog}"
+            if not download_to.endswith(expected_catalog_suffix):
+                download_to = os.path.join(download_to, expected_catalog_suffix)
+
+            # Find the latest snapshot directory
+            snapshot_pattern = os.path.join(download_to, "snapshot=*")
+            snapshot_dirs = sorted(glob.glob(snapshot_pattern), reverse=True)
+
+            if not snapshot_dirs:
+                raise ValueError(f"No snapshot directories found in {download_to}")
+
+            download_to = snapshot_dirs[0]  # Use the most recent snapshot
             logger.info(
                 f"Step 1: Reading catalog {catalog} from local files in {download_to}"
             )
@@ -102,7 +116,9 @@ async def main() -> None:
         return
 
     download_to: str = args.download
-    if not args.local:
+    if args.local:
+        download_to = os.path.join(download_to, f"catalog={args.catalog}")
+    else:
         octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
 
         if octogen_customer_name not in download_to:
