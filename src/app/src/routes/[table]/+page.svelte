@@ -1,9 +1,8 @@
 <script>
     import { onMount } from 'svelte';
     import ProductCard from '../../components/ProductCard.svelte';
-    import Pagination from '../../components/Pagination.svelte';
-    import ProductCardSkeleton from '../../components/ProductCardSkeleton.svelte';
-    
+    import ProductGrid from '../../components/ProductGrid.svelte';
+    import SearchBar from '../../components/SearchBar.svelte';
     // Get table name from URL path, similar to ProductList.svelte
     $: tableName = window.location.pathname.split('/')[1] || 'anntaylor';
     
@@ -84,49 +83,19 @@
 
     <!-- Product Grid -->
     {#if !searchQuery}
-        <div>
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-semibold">All Products</h2>
-                <span class="text-gray-600">{totalProducts} products</span>
-            </div>
-            
-            <!-- Page Size Selector -->
-            <div class="mb-4">
-                <label class="mr-2">Items per page:</label>
-                <select 
-                    bind:value={perPage}
-                    class="px-2 py-1 border rounded"
-                >
-                    {#each pageSizeOptions as size}
-                        <option value={size}>{size}</option>
-                    {/each}
-                </select>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {#if loading}
-                    {#each Array(perPage) as _}
-                        <ProductCardSkeleton />
-                    {/each}
-                {:else}
-                    {#each products as product}
-                        <ProductCard 
-                            {product} 
-                            expanded={expandedProductId === product.id}
-                            onToggleExpand={handleToggleExpand}
-                        />
-                    {/each}
-                {/if}
-            </div>
-            
-            <div class="mt-6">
-                <Pagination 
-                    {currentPage}
-                    {totalPages}
-                    on:pageChange={(e) => currentPage = e.detail}
-                />
-            </div>
-        </div>
+        <ProductGrid
+            products={products}
+            isLoading={loading}
+            itemsPerPage={perPage}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalProducts}
+            title="All Products"
+            bind:expandedProductId
+            on:pageChange={(e) => currentPage = e.detail}
+            on:pageSizeChange={(e) => perPage = e.detail}
+            pageSizeOptions={pageSizeOptions}
+        />
     {:else if searchResults.length > 0}
         <div>
             <div class="flex justify-between items-center mb-4">
