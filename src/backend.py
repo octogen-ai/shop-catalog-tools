@@ -182,38 +182,58 @@ async def search_products(
     conn = get_db_connection(table_name)
     placeholders = ",".join(["?" for _ in product_ids])
 
-    cursor = conn.cursor()
-    # Query using both ID fields with correct column name
-    products = cursor.execute(
-        f"""
+    try:
+        # Modify the database query to handle malformed JSON
+        cursor = conn.cursor()
+        query_sql = f"""
         SELECT extracted_product 
         FROM {table_name} 
-        WHERE json_extract(extracted_product, '$.id') IN ({placeholders})
-        OR product_group_id IN ({placeholders})
-    """,
-        product_ids + product_ids,
-    ).fetchall()
+        WHERE TRY_CAST(json_extract(extracted_product, '$.id') AS VARCHAR) IN ({placeholders})
+        OR TRY_CAST(product_group_id AS VARCHAR) IN ({placeholders})
+        """
+        products = cursor.execute(query_sql, product_ids + product_ids).fetchall()
 
-    print(f"Found {len(products)} products in database")  # Debug print
-
-    conn.close()
-
-    return JSONResponse(
-        {
-            "products": [
-                json.loads(
+        # Add validation when parsing JSON
+        valid_products = []
+        for row in products:
+            try:
+                product_data = json.loads(
                     row[0]
                     if isinstance(conn, duckdb.DuckDBPyConnection)
                     else row["extracted_product"]
                 )
-                for row in products
-            ],
-            "total": total_count,
-            "page": page,
-            "per_page": per_page,
-            "total_pages": math.ceil(total_count / per_page),
-        }
-    )
+                valid_products.append(product_data)
+            except json.JSONDecodeError:
+                print(f"Skipping invalid JSON product: {row[0]}")
+                continue
+
+        print(f"Found {len(valid_products)} valid products in database")  # Debug print
+
+        return JSONResponse(
+            {
+                "products": valid_products,
+                "total": total_count,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": math.ceil(total_count / per_page),
+            }
+        )
+
+    except Exception as e:
+        print(f"Search error: {str(e)}")  # Debug print
+        return JSONResponse(
+            {
+                "products": [],
+                "total": 0,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": 0,
+                "error": "Search failed due to data integrity issues",
+            },
+            status_code=200,  # Return empty results instead of 500 error
+        )
+    finally:
+        conn.close()
 
 
 def format_yaml_as_html(yaml_str: str) -> str:
