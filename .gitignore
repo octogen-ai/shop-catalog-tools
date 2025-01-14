@@ -170,6 +170,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 *.duckdb
+*.sqlite
+*.db
 *catalog.duckdb*
 *.json
 google_credentials.json
