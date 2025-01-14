@@ -11,7 +11,6 @@
 
     $: {
         currentPath = window.location.pathname;
-        console.log('Path updated:', currentPath);
     }
 
     onMount(() => {
