@@ -142,7 +142,6 @@
       if (priceComponent && priceComponent.length > 0) {
         for (const component of priceComponent) {
           if (component.priceType === 'https://schema.org/RegularPrice') {
-            console.log('component', component);
             return component.price;
           }
         }
