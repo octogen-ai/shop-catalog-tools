@@ -142,6 +142,7 @@
       if (priceComponent && priceComponent.length > 0) {
         for (const component of priceComponent) {
           if (component.priceType === 'https://schema.org/RegularPrice') {
+            console.log('component', component);
             return component.price;
           }
         }
@@ -149,6 +150,14 @@
       return 0;
     }
     function getFinalPrice(product) {
+      const priceComponent = product.offers?.priceSpecification?.priceComponent;
+      if (priceComponent && priceComponent.length > 0) {
+        for (const component of priceComponent) {
+          if (component.priceType !== 'https://schema.org/RegularPrice') {
+            return component.price;
+          }
+        }
+      }
       const priceSpec = product.offers?.priceSpecification;
       return priceSpec?.price || priceSpec?.salePrice || 0;
     }
