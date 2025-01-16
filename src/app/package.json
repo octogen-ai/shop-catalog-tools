@@ -19,9 +19,7 @@
         "vite": "^5.4.11"
     },
     "dependencies": {
-        "chart.js": "^4.4.7",
         "js-yaml": "^4.1.0",
-        "react-json-view": "^1.21.3",
         "svelte-json-tree": "^2.2.0",
         "svelte-routing": "^2.13.0"
     }
