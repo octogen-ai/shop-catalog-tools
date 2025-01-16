@@ -1,0 +1,58 @@
+/* JSON Tree Monokai Theme */
+#json-tree {
+    /* Colors */
+    --json-tree-string-color: #E6DB74;      /* Yellow for strings */
+    --json-tree-boolean-color: #A6E22E;     /* Green for booleans */
+    --json-tree-number-color: #AE81FF;      /* Purple for numbers */
+    --json-tree-property-color: #F92672;    /* Pink for properties/keys */
+    --json-tree-null-color: #FD971F;        /* Orange for null */
+    --json-tree-undefined-color: #FD971F;   /* Orange for undefined */
+    --json-tree-function-color: #66D9EF;    /* Blue for functions */
+    --json-tree-symbol-color: #F92672;      /* Pink for symbols */
+    --json-tree-label-color: #F8F8F2;       /* Light gray for labels */
+    --json-tree-arrow-color: #F8F8F2;       /* Light gray for arrows */
+    --json-tree-operator-color: #F8F8F2;    /* Light gray for operators */
+    --json-tree-date-color: #F8F8F2;        /* Light gray for dates */
+    --json-tree-internal-color: #75715E;    /* Darker gray for internal */
+    --json-tree-regex-color: #E6DB74;       /* Yellow for regex */
+
+    /* Font settings */
+    --json-tree-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --json-tree-font-size: 1em;
+    
+    /* Layout */
+    --json-tree-li-indentation: 1.5em;
+    --json-tree-li-line-height: 1.5;
+
+    /* Background is set directly */
+    background-color: #272822;
+    color: #F8F8F2;
+}
+
+/* Remove any conflicting global styles */
+.svelte-json-tree-key,
+.svelte-json-tree-value,
+.svelte-json-tree-string,
+.svelte-json-tree-number,
+.svelte-json-tree-boolean,
+.svelte-json-tree-null {
+    color: inherit !important;
+}
+
+/* Format buttons styling */
+.format-button {
+    @apply px-4 py-2 rounded-md mr-2 transition-colors duration-200;
+}
+
+.format-button:hover {
+    @apply bg-gray-700;
+}
+
+.format-button.active {
+    @apply bg-blue-600 text-white;
+}
+
+/* Pre blocks for JSON and YAML views */
+pre {
+    @apply bg-gray-800 text-white p-4 rounded overflow-auto;
+}

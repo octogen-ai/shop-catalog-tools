@@ -4,6 +4,8 @@
     import CatalogSelector from "./CatalogSelector.svelte";
     import ProductList from "../routes/ProductList.svelte";
     import Analytics from "../routes/Analytics.svelte";
+    import ProductView from "../routes/[table]/product/[id]/+page.svelte";
+    import CrawlsView from "../routes/[table]/product/[id]/crawls/+page.svelte";
 
     export let url = "";
     export let currentCatalog;
@@ -56,6 +58,8 @@
     </nav>
 
     <main class="container mx-auto px-4 py-8">
+        <Route path="/:table/product/:id/crawls" component={CrawlsView} />
+        <Route path="/:table/product/:id" component={ProductView} />
         <Route path="/:table/analytics" component={Analytics} />
         <Route path="/:table" component={ProductList} />
     </main>

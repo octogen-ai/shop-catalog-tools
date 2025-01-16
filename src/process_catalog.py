@@ -1,17 +1,17 @@
 import argparse
 import asyncio
-import glob
 import logging
 import os
 from typing import Optional
 
 from dotenv import load_dotenv
 
+import load_to_db
+
 # Import functions from existing scripts
 from download_catalog_files import download_catalog
 from index_catalog import create_whoosh_index
-from load_to_db import load_parquet_files_to_db
-from utils import get_catalog_db_path
+from utils import get_catalog_db_path, get_latest_snapshot_path
 
 # Configure logging
 logging.basicConfig(
@@ -26,26 +26,21 @@ async def process_catalog(
     index_dir: Optional[str] = None,
     batch_size: int = 1000,
     read_from_local_files: bool = False,
+    crawl_sources_dir: Optional[str] = None,
 ) -> None:
     """Process a catalog through all three steps: download, load to DB, and index."""
     octogen_catalog_bucket = os.getenv("OCTOGEN_CATALOG_BUCKET_NAME")
     octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
+    original_download_to: str = download_to
+    # Ensure download_to ends with catalog={catalog}
     try:
         # Step 1: Download catalog
         if read_from_local_files:
-            # Ensure download_to ends with catalog={catalog}
-            expected_catalog_suffix = f"catalog={catalog}"
-            if not download_to.endswith(expected_catalog_suffix):
-                download_to = os.path.join(download_to, expected_catalog_suffix)
-
             # Find the latest snapshot directory
-            snapshot_pattern = os.path.join(download_to, "snapshot=*")
-            snapshot_dirs = sorted(glob.glob(snapshot_pattern), reverse=True)
-
-            if not snapshot_dirs:
+            download_to = get_latest_snapshot_path(download_to)
+            if not download_to:
                 raise ValueError(f"No snapshot directories found in {download_to}")
 
-            download_to = snapshot_dirs[0]  # Use the most recent snapshot
             logger.info(
                 f"Step 1: Reading catalog {catalog} from local files in {download_to}"
             )
@@ -57,13 +52,33 @@ async def process_catalog(
                 catalog=catalog,
                 download_path=download_to,
             )
+        expected_catalog_suffix = f"catalog={catalog}"
+        if not download_to.endswith(expected_catalog_suffix):
+            download_to = os.path.join(
+                download_to, octogen_customer_name, expected_catalog_suffix
+            )
+        download_to = get_latest_snapshot_path(download_to)
 
         # Step 2: Load to database
-        logger.info(f"Step 2: Loading catalog {catalog} to DuckDB database")
+        logger.info(
+            f"Step 2: Loading catalog {catalog} to DuckDB database. From parquet files in {download_to}"
+        )
         db_path = get_catalog_db_path(catalog, raise_if_not_found=False)
         logger.debug(f"Using database path: {db_path}")
-        load_parquet_files_to_db(download_to, catalog, create_if_missing=True)
-
+        load_to_db.load_products_to_db(download_to, catalog, create_if_missing=True)
+        if crawl_sources_dir:
+            print(f"crawl_sources_dir: {crawl_sources_dir}")
+            print(f"original_download_to: {original_download_to}")
+            print(f"download_to: {download_to}")
+            crawl_sources_dir = download_to.replace(
+                original_download_to, crawl_sources_dir
+            )
+            logger.info(
+                f"Step 2.1: Processing crawled sources in {crawl_sources_dir} and linking to catalog {catalog}"
+            )
+            load_to_db.load_crawls_to_db(
+                crawl_sources_dir, catalog, create_if_missing=True
+            )
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
         if not index_dir:
@@ -106,6 +121,11 @@ async def main() -> None:
         default=False,
         help="Read catalog from local files instead of downloading from GCS",
     )
+    parser.add_argument(
+        "--crawl-sources-dir",
+        type=str,
+        help="Folder for crawled sources. Those get processed, so that we can link to them. ",
+    )
 
     args = parser.parse_args()
     if not load_dotenv():
@@ -118,12 +138,9 @@ async def main() -> None:
     download_to: str = args.download
     if args.local:
         download_to = os.path.join(download_to, f"catalog={args.catalog}")
-    else:
-        octogen_customer_name = os.getenv("OCTOGEN_CUSTOMER_NAME")
-
-        if octogen_customer_name not in download_to:
-            download_to = os.path.join(
-                download_to, octogen_customer_name, f"catalog={args.catalog}"
+        if args.crawl_sources_dir:
+            args.crawl_sources_dir = os.path.join(
+                args.crawl_sources_dir, f"catalog={args.catalog}"
             )
 
     await process_catalog(
@@ -132,6 +149,7 @@ async def main() -> None:
         index_dir=args.index_dir,
         batch_size=args.batch_size,
         read_from_local_files=args.local,
+        crawl_sources_dir=args.crawl_sources_dir,
     )
 
 

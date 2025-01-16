@@ -1,6 +1,15 @@
+import glob
 import os
 
 from fastapi import HTTPException
+
+
+def get_latest_snapshot_path(folder: str) -> str:
+    print(f"folder: {folder}")
+    snapshot_pattern = os.path.join(folder, "snapshot=*")
+    snapshot_dirs = sorted(glob.glob(snapshot_pattern), reverse=True)
+
+    return snapshot_dirs[0]
 
 
 def get_catalog_db_path(table_name: str, raise_if_not_found: bool = True) -> str:

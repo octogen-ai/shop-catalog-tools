@@ -5,6 +5,7 @@
     import ColorPicker from './ColorPicker.svelte';
     import SizePicker from './SizePicker.svelte';
     import ImageGallery from './ImageGallery.svelte';
+    import AdditionalAttributes from './AdditionalAttributes.svelte';
 
     export let product;
     export let expanded = false;
@@ -138,27 +139,72 @@
       }
     }
     function getOriginalPrice(product) {
-      const priceComponent = product.offers?.priceSpecification?.priceComponent;
-      if (priceComponent && priceComponent.length > 0) {
-        for (const component of priceComponent) {
+      if (!product.offers) return null;
+      
+      // Handle CompoundPriceSpecification
+      if (product.offers.priceSpecification?.priceComponent) {
+        const components = product.offers.priceSpecification.priceComponent;
+        for (const component of components) {
           if (component.priceType === 'https://schema.org/RegularPrice') {
             return component.price;
           }
         }
       }
-      return 0;
+      
+      // Handle AggregateOffer
+      if (product.offers.highPrice) {
+        return product.offers.highPrice;
+      }
+      
+      // Handle single Offer
+      if (product.offers.priceSpecification?.price) {
+        return product.offers.priceSpecification.price;
+      }
+      
+      // Handle list of Offers
+      if (Array.isArray(product.offers.offers)) {
+        const prices = product.offers.offers
+          .map(offer => offer.priceSpecification?.price)
+          .filter(price => price != null);
+        return Math.max(...prices);
+      }
+      
+      return null;
     }
     function getFinalPrice(product) {
-      const priceComponent = product.offers?.priceSpecification?.priceComponent;
-      if (priceComponent && priceComponent.length > 0) {
-        for (const component of priceComponent) {
-          if (component.priceType !== 'https://schema.org/RegularPrice') {
+      if (!product.offers) return null;
+      
+      // Handle CompoundPriceSpecification
+      if (product.offers.priceSpecification?.priceComponent) {
+        const components = product.offers.priceSpecification.priceComponent;
+        for (const component of components) {
+          if (component.priceType === 'https://schema.org/SalePrice') {
             return component.price;
           }
         }
+        // If no sale price found, return the regular price
+        return getOriginalPrice(product);
       }
-      const priceSpec = product.offers?.priceSpecification;
-      return priceSpec?.price || priceSpec?.salePrice || 0;
+      
+      // Handle AggregateOffer
+      if (product.offers.lowPrice) {
+        return product.offers.lowPrice;
+      }
+      
+      // Handle single Offer
+      if (product.offers.priceSpecification?.price) {
+        return product.offers.priceSpecification.price;
+      }
+      
+      // Handle list of Offers
+      if (Array.isArray(product.offers.offers)) {
+        const prices = product.offers.offers
+          .map(offer => offer.priceSpecification?.price)
+          .filter(price => price != null);
+        return Math.min(...prices);
+      }
+      
+      return null;
     }
     $: {
       if (expanded) {
@@ -247,11 +293,9 @@
                 </a>
               {/if}
               <a
-                href={`/api/${product.catalog}/product/${product.productGroupID}/raw?format=tree`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/${product.catalog}/product/${product.productGroupID}`}
                 class="text-gray-500 hover:text-gray-700"
-                title="View Raw JSON"
+                title="View Raw Data"
                 on:click|stopPropagation
               >
                 <div class="relative group">
@@ -260,6 +304,21 @@
                   </svg>
                   <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
                     Raw product data
+                  </div>
+                </div>
+              </a>
+              <a
+              href={`/${product.catalog}/product/${product.productGroupID}/crawls?url=${encodeURIComponent(product.url)}`}
+              class="text-gray-500 hover:text-gray-700"
+              title="View Crawl History"
+              on:click|stopPropagation
+              >
+                <div class="relative group">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                  </svg>
+                  <div class="absolute hidden group-hover:block bg-gray-800 text-white text-sm rounded px-2 py-1 -mt-1 left-1/2 transform -translate-x-1/2 -translate-y-full z-[100]">
+                    View crawl history
                   </div>
                 </div>
               </a>
@@ -453,6 +512,10 @@
                           <p>{product.description}</p>
                         </div>
                       </div>
+                    {/if}
+
+                    {#if product.additional_attributes}
+                      <AdditionalAttributes attributes={product.additional_attributes} />
                     {/if}
                   {:else}
                     <!-- No variants, just a single product -->

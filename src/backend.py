@@ -2,21 +2,19 @@ import json
 import math
 import multiprocessing
 import os
-from pathlib import Path
 
 import duckdb
-import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from whoosh.index import open_dir
 from whoosh.qparser import MultifieldParser
 
 app = FastAPI()
 
 # Serve the Svelte app
+# and the vendor files
 app.mount("/static", StaticFiles(directory="src/app/dist", html=True), name="app")
 
 
@@ -42,10 +40,6 @@ def get_db_connection(table_name: str) -> duckdb.DuckDBPyConnection:
             detail=f"Database {table_name}_catalog.duckdb not found",
         )
     return duckdb.connect(db_path)
-
-
-# Add to imports at top
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 @app.get("/")
@@ -236,51 +230,16 @@ async def search_products(
         conn.close()
 
 
-def format_yaml_as_html(yaml_str: str) -> str:
-    """Convert YAML string to HTML format with styling.
+@app.get("/api/{table}/product/{product_group_id}/data")
+async def get_product_data(table: str, product_group_id: str):
+    """Get raw product data.
 
     Args:
-        yaml_str (str): YAML formatted string
-
-    Returns:
-        str: HTML formatted string with styling for attributes and URLs
-    """
-    lines = yaml_str.split("\n")
-    processed_lines = []
-
-    for line in lines:
-        if ":" in line:
-            # Split on first colon and handle attribute names
-            attr_name, value = line.split(":", 1)
-            if "url" in attr_name:
-                # Handle URL values specially
-                url = value.strip()
-                processed_lines.append(
-                    f'<strong>{attr_name}</strong>: <a href="{url}">{url}</a>'
-                )
-            else:
-                # Make regular attributes bold
-                processed_lines.append(f"<strong>{attr_name}</strong>:{value}")
-        else:
-            processed_lines.append(line)
-
-    return "<pre>" + "\n".join(processed_lines) + "</pre>"
-
-
-@app.get("/api/{table}/product/{product_group_id}/raw")
-async def get_raw_product(
-    request: Request, table: str, product_group_id: str, format: str = "json"
-):
-    """Get raw product data in specified format.
-
-    Args:
-        request (Request): FastAPI request object
         table (str): Catalog/table name
         product_id (str): Product identifier
-        format (str, optional): Output format (json/yaml/tree). Defaults to "json".
 
     Returns:
-        TemplateResponse: Rendered template with product data
+        JSONResponse: Product data
 
     Raises:
         HTTPException: If product is not found
@@ -298,24 +257,7 @@ async def get_raw_product(
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    data = json.loads(result[0])
-    formats = {"json": "JSON", "yaml": "YAML", "tree": "Tree View"}
-
-    template_context = {
-        "request": request,
-        "formats": formats,
-        "current_format": format.lower(),
-        "format": format.lower(),
-        "json_data": json.dumps(data),
-    }
-
-    if format.lower() == "yaml":
-        yaml_str = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-        template_context["content"] = format_yaml_as_html(yaml_str)
-    elif format.lower() == "json":
-        template_context["content"] = json.dumps(data, indent=2)
-
-    return templates.TemplateResponse("product_view.html", template_context)
+    return JSONResponse(json.loads(result[0]))
 
 
 @app.get("/api/{table_name}/analytics")
@@ -733,4 +675,94 @@ async def filter_products(
             "per_page": per_page,
             "total_pages": math.ceil(total_count / per_page),
         }
+    )
+
+
+@app.get("/api/{table_name}/crawls")
+async def get_crawled_products(table_name: str, product_url: str):
+    """Get all crawled data for a specific product URL.
+
+    Args:
+        table_name (str): Name of the catalog
+        product_url (str): URL of the product to fetch crawl data for
+
+    Returns:
+        JSONResponse: List of crawled data entries for the product
+
+    Raises:
+        HTTPException: If no crawl data is found
+    """
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        f"""
+        SELECT 
+            crawl_id,
+            catalog,
+            product_url,
+            crawl_url,
+            crawl_timestamp,
+            crawl_source,
+            api_source,
+            octogen_catalog
+        FROM {table_name}_crawls 
+        WHERE product_url = ?
+        ORDER BY crawl_timestamp DESC
+        """,
+        (product_url,),
+    )
+
+    results = cursor.fetchall()
+    conn.close()
+
+    if not results:
+        raise HTTPException(
+            status_code=404, detail=f"No crawl data found for URL: {product_url}"
+        )
+
+    crawls = []
+    for row in results:
+        crawl = {
+            "crawl_id": row[0],
+            "catalog": row[1],
+            "product_url": row[2],
+            "crawl_url": row[3],
+            "crawl_timestamp": row[4],
+            "crawl_source": row[5],
+            "api_source": row[6] if row[6] else None,
+            "octogen_catalog": row[7],
+            "page_content_url": f"/api/{table_name}/crawl/{row[0]}/content",
+        }
+        crawls.append(crawl)
+
+    return JSONResponse(
+        {"product_url": product_url, "crawl_count": len(crawls), "crawls": crawls}
+    )
+
+
+@app.get("/api/{table_name}/crawl/{crawl_id}/content")
+async def get_crawl_content(table_name: str, crawl_id: int):
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        f"""
+        SELECT page_content
+        FROM {table_name}_crawls 
+        WHERE crawl_id = ?
+        """,
+        (crawl_id,),
+    )
+
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Crawl content not found")
+
+    return PlainTextResponse(
+        content=result[0],
+        media_type="text/plain",
+        headers={"Content-Disposition": "inline; filename=page_content.txt"},
     )
