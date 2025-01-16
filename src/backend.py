@@ -6,7 +6,7 @@ import os
 import duckdb
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from whoosh.index import open_dir
 from whoosh.qparser import MultifieldParser
@@ -675,4 +675,94 @@ async def filter_products(
             "per_page": per_page,
             "total_pages": math.ceil(total_count / per_page),
         }
+    )
+
+
+@app.get("/api/{table_name}/crawls")
+async def get_crawled_products(table_name: str, product_url: str):
+    """Get all crawled data for a specific product URL.
+
+    Args:
+        table_name (str): Name of the catalog
+        product_url (str): URL of the product to fetch crawl data for
+
+    Returns:
+        JSONResponse: List of crawled data entries for the product
+
+    Raises:
+        HTTPException: If no crawl data is found
+    """
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        f"""
+        SELECT 
+            crawl_id,
+            catalog,
+            product_url,
+            crawl_url,
+            crawl_timestamp,
+            crawl_source,
+            api_source,
+            octogen_catalog
+        FROM {table_name}_crawls 
+        WHERE product_url = ?
+        ORDER BY crawl_timestamp DESC
+        """,
+        (product_url,),
+    )
+
+    results = cursor.fetchall()
+    conn.close()
+
+    if not results:
+        raise HTTPException(
+            status_code=404, detail=f"No crawl data found for URL: {product_url}"
+        )
+
+    crawls = []
+    for row in results:
+        crawl = {
+            "crawl_id": row[0],
+            "catalog": row[1],
+            "product_url": row[2],
+            "crawl_url": row[3],
+            "crawl_timestamp": row[4],
+            "crawl_source": row[5],
+            "api_source": row[6] if row[6] else None,
+            "octogen_catalog": row[7],
+            "page_content_url": f"/api/{table_name}/crawl/{row[0]}/content",
+        }
+        crawls.append(crawl)
+
+    return JSONResponse(
+        {"product_url": product_url, "crawl_count": len(crawls), "crawls": crawls}
+    )
+
+
+@app.get("/api/{table_name}/crawl/{crawl_id}/content")
+async def get_crawl_content(table_name: str, crawl_id: int):
+    conn = get_db_connection(table_name)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        f"""
+        SELECT page_content
+        FROM {table_name}_crawls 
+        WHERE crawl_id = ?
+        """,
+        (crawl_id,),
+    )
+
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Crawl content not found")
+
+    return PlainTextResponse(
+        content=result[0],
+        media_type="text/plain",
+        headers={"Content-Disposition": "inline; filename=page_content.txt"},
     )

@@ -10,8 +10,10 @@
         if (typeof value === 'boolean') return `<span class="text-yellow-500">${value}</span>`;
         if (typeof value === 'number') return `<span class="text-blue-500">${value}</span>`;
         if (typeof value === 'string') {
-            // Check if the path ends with 'url' and the value looks like a URL
-            if (path[path.length - 1] === 'url' && (value.startsWith('http://') || value.startsWith('https://'))) {
+            // Check if the path ends with 'url' or '_url' and the value looks like a URL
+            const lastPath = path[path.length - 1];
+            if ((lastPath === 'url' || (lastPath != null && typeof lastPath === 'string' && lastPath.endsWith('_url'))) && 
+                (value.startsWith('http://') || value.startsWith('https://'))) {
                 return `<span class="text-green-500"><a href="${value}" target="_blank" class="hover:underline">"${value}"</a></span>`;
             }
             return `<span class="text-green-500">"${value}"</span>`;

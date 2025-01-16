@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import logging
 import os
-from typing import List
 
 from asyncer import asyncify
 from dotenv import load_dotenv
@@ -12,31 +11,29 @@ from google.cloud.storage.blob import Blob
 # Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO, 
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 # Suppress google-cloud-storage logging
-logging.getLogger('google.resumable_media._helpers').setLevel(logging.WARNING)
+logging.getLogger("google.resumable_media._helpers").setLevel(logging.WARNING)
+
 
 async def download_blob(
-    blob: Blob,
-    download_path: str,
-    semaphore: asyncio.Semaphore,
-    position: int
+    blob: Blob, download_path: str, semaphore: asyncio.Semaphore, position: int
 ) -> None:
     async with semaphore:
         full_path = os.path.join(download_path, os.path.dirname(blob.name))
         os.makedirs(full_path, exist_ok=True)
         dest_path = os.path.join(download_path, blob.name)
-        
+
         from tqdm import tqdm
+
         CHUNK_SIZE = 1024 * 1024  # 1MB chunks
-        
+
         # Create progress bar for this file
         desc = f"Downloading {os.path.basename(blob.name)}"
         with tqdm(
             total=blob.size,
-            unit='B',
+            unit="B",
             unit_scale=True,
             desc=desc.ljust(50)[:50],  # Pad description for alignment
             leave=True,  # Keep the progress bar after completion
@@ -48,18 +45,18 @@ async def download_blob(
             # Download the blob in chunks
             start = 0
             end = blob.size - 1
-            
-            with open(dest_path, 'wb') as f:
+
+            with open(dest_path, "wb") as f:
                 while start <= end:
                     chunk_end = min(start + CHUNK_SIZE - 1, end)
                     chunk = await asyncify(blob.download_as_bytes)(
-                        start=start,
-                        end=chunk_end
+                        start=start, end=chunk_end
                     )
                     f.write(chunk)
                     chunk_size = len(chunk)
                     pbar.update(chunk_size)
                     start += chunk_size
+
 
 async def download_catalog(
     *,
@@ -77,29 +74,31 @@ async def download_catalog(
     storage_client = storage.Client()
     bucket = storage_client.bucket(octogen_catalog_bucket)
     blobs = await asyncify(bucket.list_blobs)(prefix=prefix)
-    
+
     # Convert to list and filter for .parquet files and snapshots
     blobs = [blob for blob in blobs if blob.name.endswith(".parquet")]
-    
+
     # Extract snapshots and find the latest one
     import re
-    snapshot_pattern = r'snapshot=(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})'
-    snapshot_blobs = [blob for blob in blobs if 'snapshot=' in blob.name]
-    
+
+    snapshot_pattern = r"snapshot=(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})"
+    snapshot_blobs = [blob for blob in blobs if "snapshot=" in blob.name]
+
     if not snapshot_blobs:
         logger.error("No snapshot files found in the catalog")
         return
-    
+
     # Find the latest snapshot
     latest_snapshot = max(
-        re.search(snapshot_pattern, blob.name).group(1)
-        for blob in snapshot_blobs
+        re.search(snapshot_pattern, blob.name).group(1) for blob in snapshot_blobs
     )
     logger.info(f"Found latest snapshot: {latest_snapshot}")
-    
+
     # Filter for only the latest snapshot
-    blobs = [blob for blob in snapshot_blobs if f"snapshot={latest_snapshot}" in blob.name]
-    
+    blobs = [
+        blob for blob in snapshot_blobs if f"snapshot={latest_snapshot}" in blob.name
+    ]
+
     # Filter out files that already exist with matching size
     blobs_to_download = []
     for blob in blobs:
@@ -107,10 +106,14 @@ async def download_catalog(
         if os.path.exists(local_path):
             local_size = os.path.getsize(local_path)
             if local_size == blob.size:
-                logger.debug(f"Skipping {blob.name} - already exists with matching size")
+                logger.debug(
+                    f"Skipping {blob.name} - already exists with matching size"
+                )
                 continue
             else:
-                logger.debug(f"Re-downloading {blob.name} - size mismatch (local: {local_size}, remote: {blob.size})")
+                logger.debug(
+                    f"Re-downloading {blob.name} - size mismatch (local: {local_size}, remote: {blob.size})"
+                )
         blobs_to_download.append(blob)
 
     total_size = sum(blob.size for blob in blobs_to_download)
@@ -125,15 +128,16 @@ async def download_catalog(
 
     # Create a semaphore to limit concurrent downloads
     semaphore = asyncio.Semaphore(max_concurrent)
-    
+
     # Create download tasks for each blob
     tasks = []
     for i, blob in enumerate(blobs_to_download):
         task = download_blob(blob, download_path, semaphore, i)
         tasks.append(task)
-    
+
     # Run downloads concurrently
     await asyncio.gather(*tasks)
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Octogen Catalog Tools")

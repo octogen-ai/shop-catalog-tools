@@ -287,21 +287,22 @@ def load_to_duckdb(
     return total_products, duplicates_skipped
 
 
-def load_parquet_files_to_db(
+def load_products_to_db(
     download_path: str,
     catalog: str,
     create_if_missing: bool = False,
-    table_suffix: str = "products",  # Add suffix parameter to differentiate tables
 ) -> None:
-    """Load parquet files into DuckDB database."""
-    logger.info(f"Loading parquet files from {download_path} for catalog {catalog}")
+    """Load product parquet files into DuckDB database."""
+    logger.info(
+        f"Loading product parquet files from {download_path} for catalog {catalog}"
+    )
     db_path = get_catalog_db_path(catalog, raise_if_not_found=not create_if_missing)
     logger.debug(f"Using database path: {db_path}")
 
     # Connect to database
     conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
 
-    table_name = f"{os.path.splitext(catalog)[0].replace(os.sep, '_')}_{table_suffix}"
+    table_name = f"{os.path.splitext(catalog)[0].replace(os.sep, '_')}"
     parquet_files = glob.glob(
         os.path.join(download_path, "**/*.parquet"), recursive=True
     )
@@ -315,23 +316,46 @@ def load_parquet_files_to_db(
         is_flattened = is_data_flattened(first_df)
         logger.info(f"Detected {'flattened' if is_flattened else 'nested'} data format")
 
-        if table_suffix == "crawls":
-            total_records, duplicates_skipped = load_crawl_data_to_duckdb(
-                conn, parquet_files, table_name
-            )
-            logger.info(
-                "Finished loading all crawl data parquet files to DuckDB database."
-            )
-            logger.info(f"Total records loaded: {total_records}")
-        else:
-            total_products, duplicates_skipped = load_to_duckdb(
-                conn, parquet_files, table_name, is_flattened
-            )
-            logger.info(
-                "Finished loading all product parquet files to DuckDB database."
-            )
-            logger.info(f"Total products loaded: {total_products}")
+        total_products, duplicates_skipped = load_to_duckdb(
+            conn, parquet_files, table_name, is_flattened
+        )
+        logger.info("Finished loading all product parquet files to DuckDB database.")
+        logger.info(f"Total products loaded: {total_products}")
+        logger.info(f"Duplicate records skipped: {duplicates_skipped}")
+    finally:
+        conn.close()
 
+
+def load_crawls_to_db(
+    download_path: str,
+    catalog: str,
+    create_if_missing: bool = False,
+) -> None:
+    """Load crawl data parquet files into DuckDB database."""
+    logger.info(
+        f"Loading crawl data parquet files from {download_path} for catalog {catalog}"
+    )
+    db_path = get_catalog_db_path(catalog, raise_if_not_found=not create_if_missing)
+    logger.debug(f"Using database path: {db_path}")
+
+    # Connect to database
+    conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
+
+    table_name = f"{os.path.splitext(catalog)[0].replace(os.sep, '_')}_crawls"
+    parquet_files = glob.glob(
+        os.path.join(download_path, "**/*.parquet"), recursive=True
+    )
+
+    try:
+        if not parquet_files:
+            logger.error(f"No parquet files found in {download_path}")
+            return
+
+        total_records, duplicates_skipped = load_crawl_data_to_duckdb(
+            conn, parquet_files, table_name
+        )
+        logger.info("Finished loading all crawl data parquet files to DuckDB database.")
+        logger.info(f"Total records loaded: {total_records}")
         logger.info(f"Duplicate records skipped: {duplicates_skipped}")
     finally:
         conn.close()
@@ -363,7 +387,7 @@ def main() -> None:
         )
         return
 
-    load_parquet_files_to_db(args.download, args.catalog, args.db_type)
+    load_products_to_db(args.download, args.catalog, args.db_type)
 
 
 def is_data_flattened(df: pd.DataFrame) -> bool:
@@ -422,12 +446,51 @@ def load_crawl_data_to_duckdb(
     # Drop existing table if it exists
     conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-    # Create table with initial data - using crawl_url for uniqueness
+    # Create table with initial data - removed crawl_url from uniqueness constraints
     conn.execute(f"""
-        CREATE TABLE {table_name} AS 
-        SELECT DISTINCT ON (crawl_url, crawl_timestamp) *
-        FROM first_df
-        ORDER BY crawl_url, crawl_timestamp DESC
+        CREATE TABLE {table_name} (
+            crawl_id INTEGER PRIMARY KEY,
+            catalog VARCHAR,
+            product_url VARCHAR,
+            crawl_url VARCHAR,
+            page_content VARCHAR,
+            crawl_timestamp BIGINT,
+            crawl_source VARCHAR,
+            api_source VARCHAR,
+            octogen_catalog VARCHAR
+        );
+
+        CREATE SEQUENCE IF NOT EXISTS {table_name}_id_seq;
+    """)
+
+    # Modified initial data insertion - only using timestamp for ordering
+    conn.execute(f"""
+        INSERT INTO {table_name} (
+            crawl_id,
+            catalog,
+            product_url,
+            crawl_url,
+            page_content,
+            crawl_timestamp,
+            crawl_source,
+            api_source,
+            octogen_catalog
+        )
+        SELECT 
+            nextval('{table_name}_id_seq'),
+            catalog,
+            product_url,
+            crawl_url,
+            page_content,
+            crawl_timestamp,
+            crawl_source,
+            api_source,
+            octogen_catalog
+        FROM (
+            SELECT *
+            FROM first_df
+            ORDER BY crawl_timestamp DESC
+        );
     """)
 
     initial_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -458,21 +521,39 @@ def load_crawl_data_to_duckdb(
             # Count records before insertion
             pre_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-            # Insert new records, keeping only the latest crawl for each crawl URL
+            # Modified insert query - removed crawl_url uniqueness check
             conn.execute(f"""
-                INSERT INTO {table_name}
-                SELECT t.* 
+                INSERT INTO {table_name} (
+                    crawl_id,
+                    catalog,
+                    product_url,
+                    crawl_url,
+                    page_content,
+                    crawl_timestamp,
+                    crawl_source,
+                    api_source,
+                    octogen_catalog
+                )
+                SELECT 
+                    nextval('{table_name}_id_seq'),
+                    t.catalog,
+                    t.product_url,
+                    t.crawl_url,
+                    t.page_content,
+                    t.crawl_timestamp,
+                    t.crawl_source,
+                    t.api_source,
+                    t.octogen_catalog
                 FROM (
-                    SELECT DISTINCT ON (crawl_url, crawl_timestamp) *
+                    SELECT *
                     FROM df
-                    ORDER BY crawl_url, crawl_timestamp DESC
+                    ORDER BY crawl_timestamp DESC
                 ) t
                 WHERE NOT EXISTS (
                     SELECT 1 
                     FROM {table_name} m 
-                    WHERE m.crawl_url = t.crawl_url 
-                    AND m.crawl_timestamp = t.crawl_timestamp
-                )
+                    WHERE m.crawl_timestamp = t.crawl_timestamp
+                );
             """)
 
             # Count records after insertion
