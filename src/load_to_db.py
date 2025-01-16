@@ -291,22 +291,22 @@ def load_parquet_files_to_db(
     download_path: str,
     catalog: str,
     create_if_missing: bool = False,
+    table_suffix: str = "products",  # Add suffix parameter to differentiate tables
 ) -> None:
     """Load parquet files into DuckDB database."""
     logger.info(f"Loading parquet files from {download_path} for catalog {catalog}")
     db_path = get_catalog_db_path(catalog, raise_if_not_found=not create_if_missing)
     logger.debug(f"Using database path: {db_path}")
 
-    # Connect to database based on type
+    # Connect to database
     conn = duckdb.connect(db_path, config={"allow_unsigned_extensions": "true"})
 
-    table_name = os.path.splitext(catalog)[0].replace(os.sep, "_")
+    table_name = f"{os.path.splitext(catalog)[0].replace(os.sep, '_')}_{table_suffix}"
     parquet_files = glob.glob(
         os.path.join(download_path, "**/*.parquet"), recursive=True
     )
 
     try:
-        # Read first file to determine if data is flattened
         if not parquet_files:
             logger.error(f"No parquet files found in {download_path}")
             return
@@ -315,13 +315,24 @@ def load_parquet_files_to_db(
         is_flattened = is_data_flattened(first_df)
         logger.info(f"Detected {'flattened' if is_flattened else 'nested'} data format")
 
-        total_products, duplicates_skipped = load_to_duckdb(
-            conn, parquet_files, table_name, is_flattened
-        )
+        if table_suffix == "crawls":
+            total_records, duplicates_skipped = load_crawl_data_to_duckdb(
+                conn, parquet_files, table_name
+            )
+            logger.info(
+                "Finished loading all crawl data parquet files to DuckDB database."
+            )
+            logger.info(f"Total records loaded: {total_records}")
+        else:
+            total_products, duplicates_skipped = load_to_duckdb(
+                conn, parquet_files, table_name, is_flattened
+            )
+            logger.info(
+                "Finished loading all product parquet files to DuckDB database."
+            )
+            logger.info(f"Total products loaded: {total_products}")
 
-        logger.info("Finished loading all parquet files to DuckDB database.")
-        logger.info(f"Total products loaded: {total_products}")
-        logger.info(f"Duplicate products skipped: {duplicates_skipped}")
+        logger.info(f"Duplicate records skipped: {duplicates_skipped}")
     finally:
         conn.close()
 
@@ -390,6 +401,95 @@ def normalize_additional_attributes(product_data):
         return normalized_attrs
     except (json.JSONDecodeError, AttributeError):
         return []
+
+
+def load_crawl_data_to_duckdb(
+    conn: duckdb.DuckDBPyConnection,
+    parquet_files: list[str],
+    table_name: str,
+) -> tuple[int, int]:
+    """Load crawled product parquet files into DuckDB database."""
+    total_records = 0
+    duplicates_skipped = 0
+
+    if not parquet_files:
+        return total_records, duplicates_skipped
+
+    # Read first file and create table
+    first_df = pd.read_parquet(parquet_files[0])
+    file_total = len(first_df)
+
+    # Drop existing table if it exists
+    conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+    # Create table with initial data - using crawl_url for uniqueness
+    conn.execute(f"""
+        CREATE TABLE {table_name} AS 
+        SELECT DISTINCT ON (crawl_url, crawl_timestamp) *
+        FROM first_df
+        ORDER BY crawl_url, crawl_timestamp DESC
+    """)
+
+    initial_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+    duplicates_skipped += file_total - initial_count
+    total_records += initial_count
+
+    logger.info(
+        f"Created table {table_name} with schema from first file ({initial_count} records, {file_total - initial_count} duplicates skipped)"
+    )
+
+    # Create indexes for better query performance
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_{table_name}_crawl_url 
+        ON {table_name} (crawl_url)
+    """)
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_{table_name}_timestamp 
+        ON {table_name} (crawl_timestamp)
+    """)
+
+    # Append remaining files
+    for parquet_file in parquet_files[1:]:
+        logger.info(f"Loading {parquet_file}")
+        try:
+            df = pd.read_parquet(parquet_file)
+            file_total = len(df)
+
+            # Count records before insertion
+            pre_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+            # Insert new records, keeping only the latest crawl for each crawl URL
+            conn.execute(f"""
+                INSERT INTO {table_name}
+                SELECT t.* 
+                FROM (
+                    SELECT DISTINCT ON (crawl_url, crawl_timestamp) *
+                    FROM df
+                    ORDER BY crawl_url, crawl_timestamp DESC
+                ) t
+                WHERE NOT EXISTS (
+                    SELECT 1 
+                    FROM {table_name} m 
+                    WHERE m.crawl_url = t.crawl_url 
+                    AND m.crawl_timestamp = t.crawl_timestamp
+                )
+            """)
+
+            # Count records after insertion
+            post_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[
+                0
+            ]
+            inserted = post_count - pre_count
+            duplicates_skipped += file_total - inserted
+            total_records += inserted
+
+            logger.info(
+                f"Successfully loaded {inserted} rows ({file_total - inserted} duplicates skipped)"
+            )
+        except Exception as e:
+            logger.error(f"Error loading {parquet_file}: {str(e)}")
+
+    return total_records, duplicates_skipped
 
 
 if __name__ == "__main__":

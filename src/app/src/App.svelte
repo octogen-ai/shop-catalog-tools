@@ -1,6 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-    import AppRouter from "./components/AppRouter.svelte";
+    import AppRouter from "$components/AppRouter.svelte";
     
     export let url = "";
     let currentCatalog = window.location.pathname.split('/')[1] || 'anntaylor';

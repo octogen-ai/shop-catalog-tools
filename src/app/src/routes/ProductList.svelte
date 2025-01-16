@@ -1,8 +1,8 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import ProductGrid from '../components/ProductGrid.svelte';
-    import SearchBar from '../components/SearchBar.svelte';
-    import { toTitleCase } from '../utils.js';
+    import ProductGrid from '$components/ProductGrid.svelte';
+    import SearchBar from '$components/SearchBar.svelte';
+    import { toTitleCase } from '$lib/utils.js';
     
     // Get table name from URL path
     $: tableName = window.location.pathname.split('/')[1] || 'anntaylor';

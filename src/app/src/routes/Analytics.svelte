@@ -1,8 +1,6 @@
 <script>
-    import { onMount } from 'svelte';
-    import AnalyticsCard from '../components/AnalyticsCard.svelte';
-    import { Chart } from 'chart.js/auto';
-    import { toTitleCase } from '../utils.js';
+    import AnalyticsCard from '$components/AnalyticsCard.svelte';
+    import { toTitleCase } from '$lib/utils.js';
     
     let analytics = null;
     let loading = true;

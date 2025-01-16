@@ -247,11 +247,9 @@
                 </a>
               {/if}
               <a
-                href={`/api/${product.catalog}/product/${product.productGroupID}/raw?format=tree`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/${product.catalog}/product/${product.productGroupID}`}
                 class="text-gray-500 hover:text-gray-700"
-                title="View Raw JSON"
+                title="View Raw Data"
                 on:click|stopPropagation
               >
                 <div class="relative group">
