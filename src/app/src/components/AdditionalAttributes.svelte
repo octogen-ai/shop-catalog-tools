@@ -39,8 +39,8 @@
     // Filter out attributes with empty values
     $: validAttributes = Object.entries(attributes || {}).filter(([_, value]) => {
         if (typeof value === 'string') return value.length > 0;
-        if (value.text) return value.text.length > 0;
-        if (value.numbers) return value.numbers.length > 0;
+        if (value?.text) return value.text.length > 0;
+        if (value?.numbers) return value.numbers.length > 0;
         return false;
     });
 </script>

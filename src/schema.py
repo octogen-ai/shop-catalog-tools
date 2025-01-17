@@ -181,13 +181,33 @@ class Audience(BaseModel):
     )
 
 
+class Color(BaseModel):
+    label: str = Field(
+        ...,
+        description="The color display name, or label. This may differ from standard color family names.",
+    )
+    swatch_url: Optional[HttpUrlString] = Field(
+        default=None, description="A URL pointing to the color swatch image."
+    )
+
+    model_config = ConfigDict(frozen=True)  # Makes the model immutable and hashable
+
+    def __hash__(self) -> int:
+        return hash((self.label, self.swatch_url))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Color):
+            return NotImplemented
+        return self.label == other.label and self.swatch_url == other.swatch_url
+
+
 class ColorInfo(BaseModel):
     color_families: Optional[List[str]] = Field(
         default=None,
         max_length=10,
         description="Standard color families, such as 'Red', 'Green', 'Blue'. Maximum 5 values.",
     )
-    colors: Optional[List[str]] = Field(
+    colors: Optional[List[Color]] = Field(
         default=[],
         max_length=75,
         description="Color display names, which may differ from standard color family names. Maximum 75 values.",
