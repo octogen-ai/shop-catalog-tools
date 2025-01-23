@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, Generator, List, Optional, Union
 
 import yaml
 from pydantic import (
@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     Field,
     HttpUrl,
+    field_validator,
 )
 from typing_extensions import Annotated
 
@@ -181,17 +182,87 @@ class Audience(BaseModel):
     )
 
 
+class Color(BaseModel):
+    label: str = Field(
+        ...,
+        description="The color display name, or label. This may differ from standard color family names.",
+    )
+    swatch_url: Optional[HttpUrlString] = Field(
+        default=None, description="A URL pointing to the color swatch image."
+    )
+
+    model_config = ConfigDict(
+        frozen=True, from_attributes=True
+    )  # Makes the model immutable and hashable
+
+    # the validator magic makes it possible to pass in a list of strings or a list of Color objects
+    # this is to make it backwards compatible with extractor code that only produces color labels
+    # and extractor code that produces Color objects with a label and swatch_url.
+    @classmethod
+    def __get_validators__(cls) -> Generator[Callable[[Any], "Color"], None, None]:
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v: Any) -> "Color":
+        if isinstance(v, str):
+            return cls(label=v)
+        elif isinstance(v, Color):
+            return v
+        else:
+            raise ValueError("Invalid value for Color")
+
+    def __hash__(self) -> int:
+        return hash((self.label, self.swatch_url))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Color):
+            return NotImplemented
+        return self.label == other.label and self.swatch_url == other.swatch_url
+
+
 class ColorInfo(BaseModel):
     color_families: Optional[List[str]] = Field(
         default=None,
         max_length=10,
         description="Standard color families, such as 'Red', 'Green', 'Blue'. Maximum 5 values.",
     )
-    colors: Optional[List[str]] = Field(
+    colors: Optional[List[Color]] = Field(
         default=[],
         max_length=75,
         description="Color display names, which may differ from standard color family names. Maximum 75 values.",
     )
+
+    # the validator magic makes it possible to pass in a list of strings or a list of Color objects
+    # this is to make it backwards compatible with extractor code that only produces color labels
+    # and extractor code that produces Color objects with a label and swatch_url.
+    @field_validator("colors", mode="before")
+    @classmethod
+    def validate_colors(
+        cls, v: Optional[List[Union[str, Color]]]
+    ) -> Optional[List[Color]]:
+        if v is None:
+            return None
+        return [Color(label=color) if isinstance(color, str) else color for color in v]
+
+    @classmethod
+    def __get_validators__(cls) -> Generator[Callable[[Any], "ColorInfo"], None, None]:
+        yield cls.validate
+
+    @classmethod
+    def validate(
+        cls, v: Union[List[Union[str, Color]], "ColorInfo", Dict[str, Any]]
+    ) -> "ColorInfo":
+        if isinstance(v, list):
+            return cls(
+                colors=[
+                    Color(label=color) if isinstance(color, str) else color
+                    for color in v
+                ]
+            )
+        elif isinstance(v, ColorInfo):
+            return v
+        elif isinstance(v, dict):
+            return cls(**v)
 
 
 class Promotion(BaseModel):
@@ -221,31 +292,44 @@ class BreadcrumbItem(BaseModel):
 
 class BreadcrumbList(BaseModel):
     context: ContextEnum = Field(
-        ...,
+        default=ContextEnum.SCHEMA_ORG_HTTPS,
     )
-    type_: str = Field(..., pattern="BreadcrumbList")
-    itemListElement: List[BreadcrumbItem]
+    type_: str = Field(default="BreadcrumbList", pattern="BreadcrumbList")
+    itemListElement: List[BreadcrumbItem] = Field(
+        default=[],
+        description="The list of breadcrumb items.",
+    )
 
 
 class PostalAddress(BaseModel):
     """Schema.org model for PostalAddress."""
 
     type: str = Field(default="PostalAddress", validation_alias="type")
-    streetAddress: Optional[str]
-    addressLocality: Optional[str]
-    addressRegion: Optional[str]
-    postalCode: Optional[str]
-    addressCountry: Optional[str]
+    streetAddress: Optional[str] = Field(
+        default=None, description="The street address."
+    )
+    addressLocality: Optional[str] = Field(default=None, description="The locality.")
+    addressRegion: Optional[str] = Field(default=None, description="The region.")
+    postalCode: Optional[str] = Field(default=None, description="The postal code.")
+    addressCountry: Optional[str] = Field(default=None, description="The country.")
 
 
 class ContactPoint(BaseModel):
     """Schema.org model for ContactPoint."""
 
     type: str = Field(default="ContactPoint", validation_alias="type")
-    telephone: Optional[str]
-    email: Optional[str]
-    contactType: Optional[str] = "customer service"
-    address: Optional[PostalAddress]
+    telephone: Optional[str] = Field(
+        default=None, description="The telephone number of the contact point."
+    )
+    email: Optional[str] = Field(
+        default=None, description="The email address of the contact point."
+    )
+    contactType: Optional[str] = Field(
+        default="customer service", description="The type of contact point."
+    )
+    address: Optional[PostalAddress] = Field(
+        default=None, description="The address of the contact point."
+    )
 
 
 class Organization(BaseModel):
@@ -255,11 +339,21 @@ class Organization(BaseModel):
         default="https://schema.org", validation_alias="context"
     )
     type: Optional[str] = Field(default="Organization", validation_alias="type")
-    name: Optional[str]
-    url: Optional[HttpUrlString]
-    logo: Optional[HttpUrlString]
-    contactPoint: Optional[ContactPoint]
-    sameAs: Optional[List[HttpUrlString]]
+    name: Optional[str] = Field(
+        default=None, description="The name of the organization."
+    )
+    url: Optional[HttpUrlString] = Field(
+        default=None, description="The URL of the organization."
+    )
+    logo: Optional[HttpUrlString] = Field(
+        default=None, description="The logo of the organization."
+    )
+    contactPoint: Optional[ContactPoint] = Field(
+        default=None, description="The contact point of the organization."
+    )
+    sameAs: Optional[List[HttpUrlString]] = Field(
+        default=None, description="The same as of the organization."
+    )
 
     model_config = ConfigDict(
         populate_by_name=True
@@ -291,22 +385,82 @@ class Brand(BaseModel):
     )  # Allow use of aliases when populating models
 
 
+class QuantitativeValue(BaseModel):
+    """Schema.org QuantitativeValue model."""
+
+    value: float = Field(
+        default=None, description="The value of the quantitative value."
+    )
+    unitCode: str = Field(
+        default=None,
+        description="The unit of measurement given using the UN/CEFACT Common Code (3 characters) or a URL. Other codes than the UN/CEFACT Common Code may be used with a prefix followed by a colon..",
+    )
+
+
+class PriceSpecification(BaseModel):
+    """Schema.org PriceSpecification model."""
+
+    price: Optional[float] = Field(default=None, description="Price of the offer.")
+    priceCurrency: Optional[str] = Field(
+        default=None, description="Currency of the price."
+    )
+    validFrom: Optional[datetime] = Field(
+        default=None, description="The start of the validity period for the price."
+    )
+    validThrough: Optional[datetime] = Field(
+        default=None, description="The end of the validity period for the price."
+    )
+
+
+class UnitPriceSpecification(PriceSpecification):
+    """Schema.org UnitPriceSpecification model."""
+
+    priceType: Optional[str] = Field(
+        default=None,
+        description="The type of price specification as enumerated in schema.org's PriceTypeEnumeration, for example http://schema.org/ListPrice, http://schema.org/RegularPrice, http://schema.org/SalePrice, etc.",
+    )
+
+
+class CompoundPriceSpecification(BaseModel):
+    """Schema.org CompoundPriceSpecification model."""
+
+    priceComponent: Optional[List[UnitPriceSpecification]] = Field(
+        default=None,
+        description="A list of unit price specifications for the item or offer.",
+    )
+
+
 class Offer(BaseModel):
     """Schema.org Offer model."""
 
     type_: str = Field(default="Offer", validation_alias="@type")
     name: Optional[str] = Field(default=None, description="Name of the offer.")
-    price: float = Field(..., description="Price of the offer.")
-    priceCurrency: str = Field(..., description="Currency of the price.")
+    priceSpecification: Optional[
+        Union[PriceSpecification, CompoundPriceSpecification]
+    ] = Field(default=None, description="Price specification for the product.")
     sku: Optional[str] = Field(default=None, description="SKU of the product.")
     availability: Optional[HttpUrlString] = Field(
-        default=None, description="Availability of the product."
+        default=None,
+        description="The availability of the product — for example http://schema.org/InStock, http://schema.org/OutOfStock, http://schema.org/PreOrder, etc.",
     )
+    availabilityStarts: Optional[datetime] = Field(
+        default=None, description="Start time of availability."
+    )
+    availabilityEnds: Optional[datetime] = Field(
+        default=None, description="End time of availability."
+    )
+
     itemCondition: Optional[HttpUrlString] = Field(
         default=None, description="Condition of the item."
     )
     seller: Optional[Organization] = Field(
         default=None, description="Seller offering the item."
+    )
+    inventoryLevel: Optional[QuantitativeValue] = Field(
+        default=None, description="The number of items in stock."
+    )
+    eligibleQuantity: Optional[QuantitativeValue] = Field(
+        default=None, description="The number of items eligible for purchase."
     )
 
     model_config = ConfigDict(
@@ -318,13 +472,13 @@ class Offers(BaseModel):
     """Wrapper class for a list of offers."""
 
     offers: Optional[List[Offer]] = Field(
-        None, description="A list of individual offers for the product."
+        default=None, description="A list of individual offers for the product."
     )
     url: Optional[HttpUrlString] = Field(
-        None, description="The URL where the product can be purchased."
+        default=None, description="The URL where the product can be purchased."
     )
     itemCondition: Optional[str] = Field(
-        None,
+        default=None,
         description="The condition of the product (e.g., NewCondition, UsedCondition).",
     )
 
@@ -333,16 +487,24 @@ class AggregateOffer(BaseModel):
     """Schema.org AggregateOffer model."""
 
     type_: str = Field(default="AggregateOffer", validation_alias="@type")
-    offerCount: Optional[int] = Field(None, description="Number of offers.")
-    highPrice: Optional[float] = Field(None, description="Highest price of the offers.")
-    lowPrice: Optional[float] = Field(None, description="Lowest price of the offers.")
-    priceCurrency: str = Field(..., description="Currency of the offers.")
-    itemCondition: Optional[HttpUrlString] = Field(
-        None, description="Condition of the items."
+    offerCount: Optional[int] = Field(default=None, description="Number of offers.")
+    highPrice: Optional[float] = Field(
+        default=None, description="Highest price of the offers."
     )
-    seller: Optional[Organization] = Field(None, description="Seller organization.")
+    lowPrice: Optional[float] = Field(
+        default=None, description="Lowest price of the offers."
+    )
+    priceCurrency: Optional[str] = Field(
+        default=None, description="Currency of the offers."
+    )
+    itemCondition: Optional[HttpUrlString] = Field(
+        default=None, description="Condition of the items."
+    )
+    seller: Optional[Organization] = Field(
+        default=None, description="Seller organization."
+    )
     offers: Optional[List[Offer]] = Field(
-        None, description="List of individual offers."
+        default=None, description="List of individual offers."
     )
 
     model_config = ConfigDict(
@@ -362,8 +524,10 @@ class Review(BaseModel):
     """Schema.org Review definition."""
 
     type_: str = Field(default="Review", validation_alias="@type")
-    author: Person = Field(default=None, description="The author of the review.")
-    datePublished: date = Field(
+    author: Optional[Person] = Field(
+        default=None, description="The author of the review."
+    )
+    datePublished: Optional[date] = Field(
         default=None, description="The date the review was published."
     )
     reviewBody: Optional[str] = Field(
@@ -414,6 +578,7 @@ class ThreeDModel(CreativeWork):
     material: Optional[str] = Field(
         None, description="The material used to create the 3D model."
     )
+
     embedUrl: Optional[HttpUrl] = Field(
         None, description="A URL pointing to a player for the 3D model."
     )
@@ -517,14 +682,11 @@ class Product(BaseModel):
     #   "lengths_cm": {"numbers":[2.3, 15.4]},
     #   "heights_cm": {"numbers":[8.1, 6.4]}
     # }`.
-    addtional_attributes: Optional[Dict[str, CustomAttribute]] = Field(
+    additional_attributes: Optional[Dict[str, CustomAttribute | None]] = Field(
         default=None, description="Extra product attributes."
     )
     tags: Optional[List[str]] = Field(
         default=None, description="Custom tags associated with the product."
-    )
-    price_info: Optional[PriceInfo] = Field(
-        default=None, description="Product price and cost information."
     )
     rating: Optional[Rating] = Field(
         default=None, description="Product rating.", validation_alias="aggregateRating"
@@ -534,22 +696,6 @@ class Product(BaseModel):
     # The primary image of the product is used for display purposes.
     image: Optional[Image] = Field(default=None, description="Primary product image.")
 
-    class AvailabilityEnum(str, Enum):
-        AVAILABILITY_UNSPECIFIED = "AVAILABILITY_UNSPECIFIED"
-        IN_STOCK = "IN_STOCK"
-        OUT_OF_STOCK = "OUT_OF_STOCK"
-        PREORDER = "PREORDER"
-        BACKORDER = "BACKORDER"
-
-    available_time: Optional[datetime] = Field(
-        default=None, description="Timestamp when the product becomes available."
-    )
-    availability: Optional[AvailabilityEnum] = Field(
-        default=AvailabilityEnum.IN_STOCK, description="Product availability."
-    )
-    available_quantity: Optional[int] = Field(
-        default=None, description="Available quantity of the item."
-    )
     fulfillment_info: Optional[List[FulfillmentInfo]] = Field(
         default=None, description="Fulfillment information."
     )
@@ -562,6 +708,10 @@ class Product(BaseModel):
     sizes: Optional[List[str]] = Field(default=None, description="Size of the product.")
     materials: Optional[List[str]] = Field(
         default=None, description="Material of the product."
+    )
+    fit: Optional[str] = Field(default=None, description="The fit of the product.")
+    dimensions: Optional[str] = Field(
+        default=None, description="The dimensions of the product."
     )
     patterns: Optional[List[str]] = Field(
         default=None, description="Pattern or graphic print of the product."

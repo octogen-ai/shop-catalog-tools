@@ -268,8 +268,7 @@ async def get_table_analytics(table_name: str):
         table_name (str): Name of the catalog to analyze
 
     Returns:
-        JSONResponse: Detailed analytics including basic stats, variants,
-                     discounts, ratings, materials, brands, and audience analysis
+        JSONResponse: Detailed analytics including basic stats, ratings, and brands
     """
     conn = get_db_connection(table_name)
 
@@ -289,7 +288,7 @@ async def get_table_analytics(table_name: str):
     conn.execute("PRAGMA temp_directory='/tmp'")
 
     # Use the pre-extracted fields directly
-    stats_ctes = """
+    stats_ctes = f"""
         WITH basic_stats AS (
             SELECT 
                 COUNT(*) as total_records,
@@ -328,30 +327,6 @@ async def get_table_analytics(table_name: str):
             ) as field_nulls
             FROM {table_name}_extracted
         ),
-        variant_stats AS (
-            SELECT 
-                CASE 
-                    WHEN variants_json IS NULL OR variants_json = '[]' THEN 0
-                    ELSE json_array_length(variants_json)
-                END as variant_count,
-                COUNT(*) as product_count,
-                ROUND(AVG(price), 2) as avg_price
-            FROM {table_name}_extracted
-            GROUP BY 1
-        ),
-        discount_stats AS (
-            SELECT 
-                CASE 
-                    WHEN original_price IS NULL OR price >= original_price THEN 'No Discount'
-                    WHEN ((original_price - price) / original_price * 100) < 25 THEN '1-25%'
-                    WHEN ((original_price - price) / original_price * 100) < 50 THEN '26-50%'
-                    ELSE '50%+'
-                END as discount_range,
-                COUNT(*) as product_count,
-                ROUND(AVG(rating), 2) as avg_rating
-            FROM {table_name}_extracted
-            GROUP BY 1
-        ),
         rating_stats AS (
             SELECT 
                 ROUND(AVG(rating), 2) as avg_rating,
@@ -361,19 +336,6 @@ async def get_table_analytics(table_name: str):
                 MAX(rating_count) as max_review_count
             FROM {table_name}_extracted
             WHERE rating IS NOT NULL
-        ),
-        material_stats AS (
-            SELECT 
-                m.value as material,
-                COUNT(*) as count,
-                ROUND(AVG(price), 2) as avg_price,
-                array_agg(DISTINCT brand_name) as brands
-            FROM {table_name}_extracted,
-                 UNNEST(string_to_array(trim(both '[]' from materials), ',')) as m(value)
-            WHERE materials IS NOT NULL AND brand_name IS NOT NULL
-            GROUP BY 1
-            ORDER BY count DESC
-            LIMIT 10
         ),
         brand_stats AS (
             SELECT 
@@ -389,57 +351,6 @@ async def get_table_analytics(table_name: str):
             HAVING COUNT(*) >= 5
             ORDER BY product_count DESC
             LIMIT 10
-        ),
-        audience_stats AS (
-            SELECT 
-                g.value as gender,
-                a.value as age_group,
-                COUNT(*) as product_count,
-                ROUND(AVG(price), 2) as avg_price
-            FROM {table_name}_extracted,
-                 UNNEST(string_to_array(trim(both '[]' from genders), ',')) as g(value),
-                 UNNEST(string_to_array(trim(both '[]' from age_groups), ',')) as a(value)
-            WHERE genders IS NOT NULL AND age_groups IS NOT NULL
-            GROUP BY 1, 2
-            ORDER BY product_count DESC
-        ),
-        image_analysis AS (
-            SELECT 
-                COUNT(CASE WHEN product_image IS NULL THEN 1 END) as null_product_images,
-                ROUND(100.0 * COUNT(CASE WHEN product_image IS NULL THEN 1 END) / COUNT(*), 2) as null_product_images_percentage,
-                AVG(CASE 
-                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(variants_json)
-                    ELSE 0 
-                END) as avg_variant_images,
-                MAX(CASE 
-                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(variants_json)
-                    ELSE 0 
-                END) as max_variant_images,
-                MIN(CASE 
-                    WHEN variants_json IS NOT NULL AND variants_json != '[]' 
-                    THEN json_array_length(variants_json)
-                    ELSE 0 
-                END) as min_variant_images
-            FROM {table_name}_extracted
-        ),
-        additional_attr_stats AS (
-            SELECT 
-                attr_name,
-                COUNT(DISTINCT product_id) as occurrence_count,
-                COUNT(DISTINCT attr_value) as unique_values,
-                ROUND(100.0 * COUNT(DISTINCT product_id) / (
-                    SELECT COUNT(*) 
-                    FROM {table_name}_extracted 
-                    WHERE additional_attributes_json IS NOT NULL
-                ), 2) as coverage_percentage,
-                array_agg(DISTINCT attr_value) as value_samples
-            FROM {table_name}_additional_attrs
-            GROUP BY attr_name
-            HAVING COUNT(DISTINCT product_id) >= 5
-                AND COUNT(DISTINCT attr_value) > 1
-            ORDER BY occurrence_count DESC
         )
     """
 
@@ -451,35 +362,9 @@ async def get_table_analytics(table_name: str):
                 unique_brands := unique_brands,
                 price_completeness := price_completeness,
                 uniqueness_analysis := (SELECT field_uniqueness FROM uniqueness_analysis),
-                null_analysis := (SELECT field_nulls FROM null_analysis),
-                image_analysis := (SELECT struct_pack(
-                    null_product_images := null_product_images,
-                    null_product_images_percentage := null_product_images_percentage,
-                    avg_variant_images := avg_variant_images,
-                    max_variant_images := max_variant_images,
-                    min_variant_images := min_variant_images
-                ) FROM image_analysis)
+                null_analysis := (SELECT field_nulls FROM null_analysis)
             ) FROM basic_stats),
             advanced_analytics := struct_pack(
-                variant_analysis := struct_pack(
-                    variants := (SELECT array_agg(struct_pack(
-                        variant_count := variant_count,
-                        product_count := product_count,
-                        avg_price := avg_price
-                    ) ORDER BY product_count DESC) FROM variant_stats),
-                    statistics := struct_pack(
-                        avg_variants := (SELECT AVG(variant_count) FROM variant_stats WHERE variant_count > 0),
-                        max_variants := (SELECT MAX(variant_count) FROM variant_stats),
-                        total_products_with_variants := (SELECT SUM(product_count) FROM variant_stats WHERE variant_count > 0)
-                    )
-                ),
-                discount_analysis := struct_pack(
-                    ranges := (SELECT array_agg(struct_pack(
-                        discount_range := discount_range,
-                        product_count := product_count,
-                        avg_rating := avg_rating
-                    )) FROM discount_stats)
-                ),
                 rating_analysis := struct_pack(
                     statistics := (SELECT struct_pack(
                         avg_rating := avg_rating,
@@ -488,14 +373,6 @@ async def get_table_analytics(table_name: str):
                         avg_review_count := avg_review_count,
                         max_review_count := max_review_count
                     ) FROM rating_stats)
-                ),
-                material_analysis := struct_pack(
-                    popular_materials := (SELECT array_agg(struct_pack(
-                        material := material,
-                        count := count,
-                        avg_price := avg_price,
-                        brands := brands
-                    )) FROM material_stats)
                 ),
                 brand_analysis := struct_pack(
                     top_brands := (SELECT array_agg(struct_pack(
@@ -506,57 +383,6 @@ async def get_table_analytics(table_name: str):
                         avg_price := avg_price,
                         avg_rating := avg_rating
                     )) FROM brand_stats)
-                ),
-                audience_analysis := CASE 
-                    WHEN (SELECT COUNT(*) FROM audience_stats) > 0 
-                    THEN struct_pack(
-                        demographics := (SELECT array_agg(struct_pack(
-                            gender := gender,
-                            age_group := age_group,
-                            product_count := product_count,
-                            avg_price := avg_price
-                        )) FROM audience_stats)
-                    )
-                    ELSE NULL
-                END,
-                additional_attributes_analysis := struct_pack(
-                    attributes := (
-                        SELECT array_agg(struct_pack(
-                            name := attr_name,
-                            occurrence_count := occurrence_count,
-                            unique_values := unique_values,
-                            coverage_percentage := coverage_percentage,
-                            value_samples := value_samples
-                        ))
-                        FROM additional_attr_stats
-                    ),
-                    statistics := struct_pack(
-                        total_attributes := (SELECT COUNT(DISTINCT attr_name) FROM additional_attr_stats),
-                        avg_attributes_per_product := (
-                            SELECT AVG(
-                                array_length(
-                                    string_to_array(
-                                        CASE 
-                                            WHEN additional_attributes_json IS NULL THEN ''
-                                            ELSE trim(both '{}' from additional_attributes_json)
-                                        END,
-                                        ','
-                                    )
-                                )
-                            )
-                            FROM {table_name}_extracted
-                            WHERE additional_attributes_json IS NOT NULL
-                                AND additional_attributes_json != 'null'
-                                AND additional_attributes_json != '{}'
-                        ),
-                        products_with_attributes := (
-                            SELECT COUNT(*)
-                            FROM {table_name}_extracted
-                            WHERE additional_attributes_json IS NOT NULL
-                                AND additional_attributes_json != 'null'
-                                AND additional_attributes_json != '{}'
-                        )
-                    )
                 )
             )
         )::json as analytics
@@ -564,7 +390,6 @@ async def get_table_analytics(table_name: str):
 
     # Combine all parts
     analytics_query = stats_ctes + final_select
-    analytics_query = analytics_query.replace("{table_name}", table_name)
 
     # Execute the combined query
     cursor = conn.cursor()

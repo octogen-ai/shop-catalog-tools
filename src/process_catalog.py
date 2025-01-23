@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-import logging
 import os
 from typing import Optional
 
+import structlog
 from dotenv import load_dotenv
 
 import load_to_db
@@ -11,13 +11,11 @@ import load_to_db
 # Import functions from existing scripts
 from download_catalog_files import download_catalog
 from index_catalog import create_whoosh_index
-from utils import get_catalog_db_path, get_latest_snapshot_path
+from utils import configure_logging, get_catalog_db_path, get_latest_snapshot_path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+configure_logging(debug=False, log_to_console=True)
+logger = structlog.get_logger(__name__)
 
 
 async def process_catalog(
@@ -52,11 +50,13 @@ async def process_catalog(
                 catalog=catalog,
                 download_path=download_to,
             )
-        expected_catalog_suffix = f"catalog={catalog}"
-        if not download_to.endswith(expected_catalog_suffix):
-            download_to = os.path.join(
-                download_to, octogen_customer_name, expected_catalog_suffix
-            )
+        # Only modify path if no parquet files found in current download_to
+        if not any(f.endswith(".parquet") for f in os.listdir(download_to)):
+            expected_catalog_suffix = f"catalog={catalog}"
+            if not download_to.endswith(expected_catalog_suffix):
+                download_to = os.path.join(
+                    download_to, octogen_customer_name, expected_catalog_suffix
+                )
         download_to = get_latest_snapshot_path(download_to)
 
         # Step 2: Load to database

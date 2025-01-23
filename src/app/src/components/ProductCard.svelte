@@ -530,9 +530,9 @@
                   {/if}
 
                   <!-- Review Section -->
-                  {#if product.reviews?.length}
+                  {#if product.review?.length}
                     <div class="mt-10">
-                      <ReviewList reviews={product.reviews} />
+                      <ReviewList reviews={product.review} />
                     </div>
                   {/if}
                 </div>

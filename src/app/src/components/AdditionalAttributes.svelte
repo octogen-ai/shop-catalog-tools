@@ -2,11 +2,11 @@
     export let attributes = {};
 
     function formatAttributeName(name) {
-        return name
-            .split('_')[0] // Remove any _grp_xxx suffix
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
+        return name;
+            // .split('_')[0] // Remove any _grp_xxx suffix
+            // .split(' ')
+            // .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            // .join(' ');
     }
 
     function formatAttributeValue(attribute) {
@@ -39,8 +39,8 @@
     // Filter out attributes with empty values
     $: validAttributes = Object.entries(attributes || {}).filter(([_, value]) => {
         if (typeof value === 'string') return value.length > 0;
-        if (value.text) return value.text.length > 0;
-        if (value.numbers) return value.numbers.length > 0;
+        if (value?.text) return value.text.length > 0;
+        if (value?.numbers) return value.numbers.length > 0;
         return false;
     });
 </script>
