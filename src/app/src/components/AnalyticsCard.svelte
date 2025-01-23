@@ -2,10 +2,10 @@
     export let title;
     export let value;
     export let type = 'number';  // 'number' or 'percentage'
-    export let href = null;  // New prop for optional link
-    
-    $: formattedValue = value != null 
-        ? type === 'percentage' 
+    export let href = null;  // Optional link
+
+    $: formattedValue = value != null
+        ? type === 'percentage'
             ? `${Number(value).toFixed(1)}%`
             : Number(value).toLocaleString()
         : 'N/A';
@@ -21,4 +21,4 @@
         <h3 class="text-gray-500 text-sm font-medium">{title}</h3>
         <p class="text-3xl font-bold mt-2">{formattedValue}</p>
     </div>
-{/if} 
+{/if}

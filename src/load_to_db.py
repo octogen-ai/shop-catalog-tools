@@ -112,11 +112,11 @@ def load_to_duckdb(
                 TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
                 TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
                 TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                json_extract_string(extracted_product, 'materials') as materials,
-                json_extract_string(extracted_product, '$.audience.genders') as genders,
-                json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-                json_extract_string(extracted_product, 'hasVariant') as variants_json,
-                json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
+                -- json_extract_string(extracted_product, 'materials') as materials,
+                -- json_extract_string(extracted_product, '$.audience.genders') as genders,
+                -- json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+                -- json_extract_string(extracted_product, 'hasVariant') as variants_json,
+                -- json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
             FROM first_df
             WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
         """)
@@ -152,49 +152,49 @@ def load_to_duckdb(
         """)
 
         # Create additional attributes table
-        conn.execute(f"DROP TABLE IF EXISTS {table_name}_additional_attrs")
-        conn.execute(f"""
-            CREATE TABLE {table_name}_additional_attrs AS
-            WITH cleaned_json AS (
-                SELECT 
-                    CASE 
-                        WHEN additional_attributes_json IS NULL THEN ''
-                        ELSE trim(both '{{}}' from additional_attributes_json)
-                    END as json_text,
-                    product_id
-                FROM {table_name}_extracted
-                WHERE additional_attributes_json IS NOT NULL
-                    AND additional_attributes_json != 'null'
-                    AND additional_attributes_json != '{{}}'
-            ),
-            split_pairs AS (
-                SELECT 
-                    trim(both '"' from split_part(value, ':', 1)) as attr_name,
-                    trim(both '"' from split_part(value, ':', 2)) as attr_value,
-                    c.product_id
-                FROM cleaned_json c,
-                     (SELECT unnest(string_to_array(json_text, ',')) as value, product_id 
-                      FROM cleaned_json) as pairs(value, product_id)
-                WHERE value != ''
-            )
-            SELECT 
-                product_id,
-                attr_name,
-                attr_value
-            FROM split_pairs
-            WHERE attr_name != ''
-                AND NOT attr_name LIKE 'style%'
-        """)
+        # conn.execute(f"DROP TABLE IF EXISTS {table_name}_additional_attrs")
+        # conn.execute(f"""
+        #     CREATE TABLE {table_name}_additional_attrs AS
+        #     WITH cleaned_json AS (
+        #         SELECT
+        #             CASE
+        #                 WHEN additional_attributes_json IS NULL THEN ''
+        #                 ELSE trim(both '{{}}' from additional_attributes_json)
+        #             END as json_text,
+        #             product_id
+        #         FROM {table_name}_extracted
+        #         WHERE additional_attributes_json IS NOT NULL
+        #             AND additional_attributes_json != 'null'
+        #             AND additional_attributes_json != '{{}}'
+        #     ),
+        #     split_pairs AS (
+        #         SELECT
+        #             trim(both '"' from split_part(value, ':', 1)) as attr_name,
+        #             trim(both '"' from split_part(value, ':', 2)) as attr_value,
+        #             c.product_id
+        #         FROM cleaned_json c,
+        #              (SELECT unnest(string_to_array(json_text, ',')) as value, product_id
+        #               FROM cleaned_json) as pairs(value, product_id)
+        #         WHERE value != ''
+        #     )
+        #     SELECT
+        #         product_id,
+        #         attr_name,
+        #         attr_value
+        #     FROM split_pairs
+        #     WHERE attr_name != ''
+        #         AND NOT attr_name LIKE 'style%'
+        # """)
 
         # Create indexes for better query performance
-        conn.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_name 
-            ON {table_name}_additional_attrs (attr_name)
-        """)
-        conn.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_value 
-            ON {table_name}_additional_attrs (attr_value)
-        """)
+        # conn.execute(f"""
+        #     CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_name
+        #     ON {table_name}_additional_attrs (attr_name)
+        # """)
+        # conn.execute(f"""
+        #     CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_value
+        #     ON {table_name}_additional_attrs (attr_value)
+        # """)
 
         # Append remaining files
         for parquet_file in parquet_files[1:]:
@@ -221,11 +221,11 @@ def load_to_duckdb(
                         TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
                         TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
                         TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                        json_extract_string(extracted_product, 'materials') as materials,
-                        json_extract_string(extracted_product, '$.audience.genders') as genders,
-                        json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-                        json_extract_string(extracted_product, 'hasVariant') as variants_json,
-                        json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
+                        -- json_extract_string(extracted_product, 'materials') as materials,
+                        -- json_extract_string(extracted_product, '$.audience.genders') as genders,
+                        -- json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
+                        -- json_extract_string(extracted_product, 'hasVariant') as variants_json,
+                        -- json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
                     FROM df
                     WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
                 """)
@@ -406,25 +406,6 @@ def is_data_flattened(df: pd.DataFrame) -> bool:
     # If no extracted_product column, it IS flattened
     # logger.info("No extracted_product column found, data IS flattened")
     return True
-
-
-# Add this function to pre-process additional attributes
-def normalize_additional_attributes(product_data):
-    """Extract and normalize additional attributes from product data."""
-    try:
-        additional_attrs = product_data.get("additional_attributes", {}) or {}
-        if isinstance(additional_attrs, str):
-            additional_attrs = json.loads(additional_attrs)
-
-        # Filter out style-related attributes and normalize
-        normalized_attrs = [
-            {"attr_name": key, "attr_value": str(value)}
-            for key, value in additional_attrs.items()
-            if not key.startswith("style")
-        ]
-        return normalized_attrs
-    except (json.JSONDecodeError, AttributeError):
-        return []
 
 
 def load_crawl_data_to_duckdb(

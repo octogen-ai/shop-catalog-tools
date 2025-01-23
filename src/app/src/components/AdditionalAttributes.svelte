@@ -2,11 +2,11 @@
     export let attributes = {};
 
     function formatAttributeName(name) {
-        return name
-            .split('_')[0] // Remove any _grp_xxx suffix
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
+        return name;
+            // .split('_')[0] // Remove any _grp_xxx suffix
+            // .split(' ')
+            // .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            // .join(' ');
     }
 
     function formatAttributeValue(attribute) {
