@@ -140,70 +140,107 @@
     }
     function getOriginalPrice(product) {
       if (!product.offers) return null;
-      
-      // Handle CompoundPriceSpecification
+
+      // Handle Offer with CompoundPriceSpecification
       if (product.offers.priceSpecification?.priceComponent) {
-        const components = product.offers.priceSpecification.priceComponent;
-        for (const component of components) {
-          if (component.priceType === 'https://schema.org/RegularPrice') {
-            return component.price;
-          }
+        const regularPriceComponent = product.offers.priceSpecification.priceComponent.find(
+          (component) => component.priceType === 'https://schema.org/RegularPrice'
+        );
+        if (regularPriceComponent) {
+          return regularPriceComponent.price;
         }
       }
-      
+
       // Handle AggregateOffer
       if (product.offers.highPrice) {
         return product.offers.highPrice;
       }
-      
+
       // Handle single Offer
       if (product.offers.priceSpecification?.price) {
         return product.offers.priceSpecification.price;
       }
-      
+
       // Handle list of Offers
       if (Array.isArray(product.offers.offers)) {
         const prices = product.offers.offers
-          .map(offer => offer.priceSpecification?.price)
-          .filter(price => price != null);
-        return Math.max(...prices);
+          .map((offer) => {
+            // Check for CompoundPriceSpecification within each Offer
+            if (offer.priceSpecification?.priceComponent) {
+              const regularPriceComponent = offer.priceSpecification.priceComponent.find(
+                (component) => component.priceType === 'https://schema.org/RegularPrice'
+              );
+              if (regularPriceComponent) {
+                return regularPriceComponent.price;
+              }
+            }
+            // Fallback to price in PriceSpecification
+            return offer.priceSpecification?.price;
+          })
+          .filter((price) => price != null);
+
+        return prices.length > 0 ? Math.max(...prices) : null;
       }
-      
+
       return null;
     }
     function getFinalPrice(product) {
       if (!product.offers) return null;
-      
-      // Handle CompoundPriceSpecification
+
+      // Handle Offer with CompoundPriceSpecification
       if (product.offers.priceSpecification?.priceComponent) {
-        const components = product.offers.priceSpecification.priceComponent;
-        for (const component of components) {
-          if (component.priceType === 'https://schema.org/SalePrice') {
-            return component.price;
-          }
+        const salePriceComponent = product.offers.priceSpecification.priceComponent.find(
+          (component) => component.priceType === 'https://schema.org/SalePrice'
+        );
+        if (salePriceComponent) {
+          return salePriceComponent.price;
         }
-        // If no sale price found, return the regular price
-        return getOriginalPrice(product);
+        // If no sale price found, check for regular price
+        const regularPriceComponent = product.offers.priceSpecification.priceComponent.find(
+          (component) => component.priceType === 'https://schema.org/RegularPrice'
+        );
+        if (regularPriceComponent) {
+          return regularPriceComponent.price;
+        }
       }
-      
+
       // Handle AggregateOffer
       if (product.offers.lowPrice) {
         return product.offers.lowPrice;
       }
-      
+
       // Handle single Offer
       if (product.offers.priceSpecification?.price) {
         return product.offers.priceSpecification.price;
       }
-      
+
       // Handle list of Offers
       if (Array.isArray(product.offers.offers)) {
         const prices = product.offers.offers
-          .map(offer => offer.priceSpecification?.price)
-          .filter(price => price != null);
-        return Math.min(...prices);
+          .map((offer) => {
+            // Check for CompoundPriceSpecification within each Offer
+            if (offer.priceSpecification?.priceComponent) {
+              const salePriceComponent = offer.priceSpecification.priceComponent.find(
+                (component) => component.priceType === 'https://schema.org/SalePrice'
+              );
+              if (salePriceComponent) {
+                return salePriceComponent.price;
+              }
+              const regularPriceComponent = offer.priceSpecification.priceComponent.find(
+                (component) => component.priceType === 'https://schema.org/RegularPrice'
+              );
+              if (regularPriceComponent) {
+                return regularPriceComponent.price;
+              }
+            }
+            // Fallback to price in PriceSpecification
+            return offer.priceSpecification?.price;
+          })
+          .filter((price) => price != null);
+
+        return prices.length > 0 ? Math.min(...prices) : null;
       }
-      
+
       return null;
     }
     $: {
@@ -228,9 +265,23 @@
       : 'UNKNOWN';
     $: availabilityInfo = getAvailabilityInfo(productLocalAvailability);
 
+    function formatPrice(amount, currency = 'USD') {
+      const currencyCode = currency || 'USD';
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+      }).format(amount);
+    }
+
     // Derived price
     $: finalPrice = getFinalPrice(product);
     $: originalPrice = getOriginalPrice(product);
+
+    // Ensure the currency code defaults to 'USD' if undefined or null
+    $: priceCurrency = product.offers?.priceCurrency || 'USD';
+
+    $: finalPriceFormatted = finalPrice ? formatPrice(finalPrice, priceCurrency) : null;
+    $: originalPriceFormatted = originalPrice ? formatPrice(originalPrice, priceCurrency) : null;
 </script>
 
 <div class="bg-white">
@@ -334,11 +385,11 @@
               {/if}
 
               <!-- Price section with optional strike-through original price -->
-              {#if finalPrice}
+              {#if finalPriceFormatted}
                 <p class="text-gray-600 mb-2">
-                  ${finalPrice}
-                  {#if originalPrice && originalPrice > finalPrice}
-                    <span class="text-gray-500 line-through ml-2">${originalPrice}</span>
+                  {finalPriceFormatted}
+                  {#if originalPriceFormatted && originalPrice > finalPrice}
+                    <span class="text-gray-500 line-through ml-2">{originalPriceFormatted}</span>
                   {/if}
                 </p>
               {:else}
@@ -415,11 +466,11 @@
                     <h1 class="text-xl font-medium text-gray-900">{product.name}</h1>
 
                     <!-- Price section with optional strike-through original price -->
-                    {#if finalPrice}
+                    {#if finalPriceFormatted}
                       <p class="text-xl font-medium text-gray-900">
-                        ${finalPrice}
-                        {#if originalPrice && originalPrice > finalPrice}
-                          <span class="text-gray-500 line-through ml-2">${originalPrice}</span>
+                        {finalPriceFormatted}
+                        {#if originalPriceFormatted && originalPrice > finalPrice}
+                          <span class="text-gray-500 line-through ml-2">{originalPriceFormatted}</span>
                         {/if}
                       </p>
                     {:else}

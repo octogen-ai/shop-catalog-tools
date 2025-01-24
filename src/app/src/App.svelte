@@ -1,7 +1,8 @@
 <script>
     import { onMount } from 'svelte';
     import AppRouter from "$components/AppRouter.svelte";
-    
+    import './global.css'; // Import the global styles here
+
     export let url = "";
     let currentCatalog = window.location.pathname.split('/')[1] || 'anntaylor';
     let currentPath = window.location.pathname;
@@ -20,9 +21,3 @@
 </script>
 
 <AppRouter {url} {currentCatalog} {currentPath} />
-
-<style>
-    :global(html) {
-        background-color: #f9fafb;
-    }
-</style>

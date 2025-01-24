@@ -1,11 +1,10 @@
 import './app.css'
 import App from './App.svelte'
+import './global.css'
 
 const app = new App({
-  target: document.getElementById('app'),
-  props: {
-    url: window.location.pathname
-  }
+  target: document.body,
+  props: {}
 })
 
 export default app

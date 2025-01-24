@@ -1,4 +1,5 @@
 <script>
+    import { onMount } from 'svelte';
     export let data;
     export let format = 'json'; // 'json' or 'yaml'
     export let onKeyClick = (path) => {};
@@ -29,7 +30,8 @@
             const currentPath = [...path, key];
             const pathString = currentPath.join('.');
             
-            result += `${spacing}<span class="key"><a href="#" data-path="${pathString}" class="text-purple-500 hover:underline">${key}</a></span>: `;
+            // Use a button for interactive keys
+            result += `${spacing}<span class="key"><button type="button" data-path="${pathString}" class="text-purple-500 hover:underline focus:outline-none">${key}</button></span>: `;
             
             if (typeof value === 'object' && value !== null) {
                 if (Array.isArray(value)) {
@@ -54,42 +56,54 @@
         return result;
     }
 
-    function handleClick(event) {
-        if (event.target.tagName === 'A' && event.target.dataset.path) {
-            // Only prevent default and handle click for keys (which have data-path)
-            event.preventDefault();
-            const path = event.target.dataset.path;
-            onKeyClick(path);
-        }
-        // URLs (without data-path) will use their default behavior
-    }
-
     $: formattedData = format === 'json' 
         ? processObject(data)
         : yaml.dump(data).split('\n').map(line => {
             const [key, ...rest] = line.split(':');
             if (rest.length) {
-                return `<span class="key"><a href="#" data-path="${key.trim()}" class="text-purple-500 hover:underline">${key}</a>:${rest.join(':')}</span>`;
+                return `<span class="key"><button type="button" data-path="${key.trim()}" class="text-purple-500 hover:underline focus:outline-none">${key}</button>:${rest.join(':')}</span>`;
             }
             return line;
         }).join('\n');
+
+    let container;
+
+    onMount(() => {
+        const handleClick = (event) => {
+            if (event.target.tagName === 'BUTTON' && event.target.dataset.path) {
+                event.preventDefault();
+                const path = event.target.dataset.path;
+                onKeyClick(path);
+            }
+        };
+        container.addEventListener('click', handleClick);
+
+        return () => {
+            container.removeEventListener('click', handleClick);
+        };
+    });
 </script>
 
-<pre
-    class="bg-gray-800 text-white p-4 rounded overflow-auto"
-    on:click={handleClick}
->{@html formattedData}</pre>
+<!-- Use a div instead of pre -->
+<div
+    bind:this={container}
+    class="bg-gray-800 text-white p-4 rounded overflow-auto font-mono whitespace-pre-wrap"
+>
+    {@html formattedData}
+</div>
 
 <style>
-    pre {
-        font-family: monospace;
-        white-space: pre-wrap;
-        word-wrap: break-word;
+    :global(.key button) {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
     }
-    :global(.key a) {
-        text-decoration: none;
-    }
-    :global(.key a:hover) {
+    :global(.key button:hover),
+    :global(.key button:focus) {
         text-decoration: underline;
     }
-</style> 
+</style>

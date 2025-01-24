@@ -32,8 +32,9 @@
         <div class="flex items-center gap-4">
             {#if showPageSizeSelector}
                 <div class="flex items-center gap-2">
-                    <label class="text-sm text-gray-600">Items per page:</label>
+                    <label class="text-sm text-gray-600" for="itemsPerPageSelect">Items per page:</label>
                     <select 
+                        id="itemsPerPageSelect"
                         value={itemsPerPage} 
                         on:change={handlePageSizeChange}
                         class="border rounded p-1 text-sm"
