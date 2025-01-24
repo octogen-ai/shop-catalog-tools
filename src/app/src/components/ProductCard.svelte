@@ -6,10 +6,14 @@
     import SizePicker from './SizePicker.svelte';
     import ImageGallery from './ImageGallery.svelte';
     import AdditionalAttributes from './AdditionalAttributes.svelte';
+    import { getProductUniqueId } from '$lib/utils.js';
 
     export let product;
     export let expanded = false;
     export let onToggleExpand = () => {};
+
+    const productId = getProductUniqueId(product);
+
 
     /**
      * The product now stores current_price (finalPrice) and original_price
@@ -120,11 +124,24 @@
       : null;
 
     function nextImage() {
-      currentImageIndex = (currentImageIndex + 1) % allImages.length;
+      if (combinedImages.length > 0) {
+        currentImageIndex = (currentImageIndex + 1) % combinedImages.length;
+      }
     }
 
     function previousImage() {
-      currentImageIndex = (currentImageIndex - 1 + allImages.length) % allImages.length;
+      if (combinedImages.length > 0) {
+        currentImageIndex = (currentImageIndex - 1 + combinedImages.length) % combinedImages.length;
+      }
+    }
+
+    $: {
+      if (currentImageIndex >= combinedImages.length) {
+        currentImageIndex = combinedImages.length - 1;
+      }
+      if (currentImageIndex < 0) {
+        currentImageIndex = 0;
+      }
     }
 
     function handleBackgroundClick(event) {
@@ -301,6 +318,7 @@
               src={combinedImages[currentImageIndex].url} 
               alt={product.name} 
               class="w-full h-64 object-cover"
+              on:error|stopPropagation
             />
             {#if combinedImages.length > 1}
               <button 
@@ -316,6 +334,10 @@
                 →
               </button>
             {/if}
+          {:else}
+            <div class="w-full h-64 flex items-center justify-center bg-gray-100">
+              <p class="text-gray-500">No image available</p>
+            </div>
           {/if}
         </div>
 

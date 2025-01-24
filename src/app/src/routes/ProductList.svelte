@@ -12,7 +12,8 @@
     let searchResults = [];
     let loading = true;
     let searching = false;
-    let expandedProductId = null;
+    let expandedProductIdSearch = null;
+    let expandedProductIdAll = null;
     let currentPage = 1;
     let totalPages = 1;
     let searchCurrentPage = 1;
@@ -154,8 +155,12 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   
-    function handleToggleExpand(product) {
-        expandedProductId = expandedProductId === product.id ? null : product.id;
+    function handleToggleExpand(product, gridType) {
+        if (gridType === 'search') {
+            expandedProductIdSearch = expandedProductIdSearch === product.id ? null : product.id;
+        } else {
+            expandedProductIdAll = expandedProductIdAll === product.id ? null : product.id;
+        }
     }
 
     async function handlePageSizeChange(event) {
@@ -185,8 +190,9 @@
         totalPages={searchTotalPages}
         totalItems={totalSearchResults}
         title="Search Results"
-        bind:expandedProductId
+        bind:expandedProductId={expandedProductIdSearch}
         on:pageChange={handleSearchPageChange}
+        on:toggleExpand={(event) => handleToggleExpand(event.detail, 'search')}
         showPageSizeSelector={false}
     />
     {:else if searching}
@@ -220,8 +226,9 @@
         {totalPages}
         totalItems={totalProducts}
         title="All Products"
-        bind:expandedProductId
+        bind:expandedProductId={expandedProductIdAll}
         on:pageChange={handlePageChange}
+        on:toggleExpand={(event) => handleToggleExpand(event.detail, 'all')}
         on:pageSizeChange={(e) => handlePageSizeChange(e)}
         pageSizeOptions={[100, 200, 300, 400]}
     />

@@ -2,10 +2,11 @@
     import ProductCard from './ProductCard.svelte';
     import ProductCardSkeleton from './ProductCardSkeleton.svelte';
     import Pagination from './Pagination.svelte';
+    import { getProductUniqueId } from '$lib/utils.js';
 
     export let products = [];
     export let isLoading = false;
-    export let itemsPerPage = 30;
+    export let itemsPerPage = 10;
     export let currentPage = 1;
     export let totalPages = 1;
     export let totalItems = 0;
@@ -18,7 +19,9 @@
     const dispatch = createEventDispatcher();
 
     function handleToggleExpand(product) {
-        expandedProductId = expandedProductId === product.id ? null : product.id;
+        const productId = getProductUniqueId(product);
+        expandedProductId = expandedProductId === productId ? null : productId;
+        dispatch('toggleExpand', { product });
     }
 
     function handlePageSizeChange(event) {
@@ -64,10 +67,10 @@
             {/each}
         {:else}
             {#each products as product}
-                <ProductCard 
-                    {product} 
-                    expanded={expandedProductId === product.id}
-                    onToggleExpand={handleToggleExpand}
+                <ProductCard
+                    {product}
+                    expanded={getProductUniqueId(product) === expandedProductId}
+                    on:toggleExpand={() => handleToggleExpand(product)}
                 />
             {/each}
         {/if}
