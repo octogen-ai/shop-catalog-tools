@@ -81,8 +81,6 @@ async def process_catalog(
             )
         # Step 3: Index the data
         logger.info(f"Step 3: Indexing catalog {catalog}")
-        if not index_dir:
-            index_dir = f"/tmp/whoosh/{catalog}"
 
         create_whoosh_index(db_path, index_dir, catalog, batch_size)
 
@@ -104,12 +102,13 @@ async def main() -> None:
         "--download",
         type=str,
         required=False,
-        default="octogen-catalog-exchange",
+        default="/tmp/octogen-catalog-exchange",
         help="Path where catalog files will be downloaded",
     )
     parser.add_argument(
         "--index_dir",
         type=str,
+        default="/tmp/whoosh",
         help="Directory to store the Whoosh index (default: /tmp/whoosh/<catalog>)",
     )
     parser.add_argument(
