@@ -25,7 +25,6 @@ Please obtain the customer name and service account credentials file from your O
 OCTOGEN_CATALOG_BUCKET_NAME=octogen-catalog-exchange
 OCTOGEN_CUSTOMER_NAME=<octogen-customer-name>
 GOOGLE_APPLICATION_CREDENTIALS=<Path to the Service Account credentials file>
-DB_ENGINE=duckdb
 ```
 
 ### 3. Process the catalog
