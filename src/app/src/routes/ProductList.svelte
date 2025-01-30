@@ -52,32 +52,50 @@
     }
 
     function parseHash() {
-        const hash = window.location.hash.slice(1); // Remove the # character
-        const parts = hash.split(':');
-        if (parts[0] === 'search' && parts.length > 1) {
-            // Rejoin the rest of parts in case the search query itself contains colons
-            return decodeURIComponent(parts.slice(1).join(':'));
-        }
-        return null;
+        const hash = window.location.hash.slice(1); // Remove the '#' character
+        const params = new URLSearchParams(hash);
+        
+        const searchQuery = params.get('search') || null;
+        const expandedProductId = params.get('product') || null;
+        
+        return { searchQuery, expandedProductId };
     }
 
     function handleHashChange() {
-        const hash = decodeURIComponent(window.location.hash.slice(1));
-        if (hash) {
-            searchQuery = hash;
+        const { searchQuery: hashSearchQuery, expandedProductId: hashExpandedProductId } = parseHash();
+
+        if (hashSearchQuery !== null) {
+            // Update searchQuery and initiate search
+            searchQuery = hashSearchQuery;
             handleSearch({ type: 'hashchange' });
         } else {
+            // Clear search if no search query in hash
             searchQuery = '';
             searchResults = [];
             searchAttempted = false;
+        }
+
+        // Update expanded product IDs based on the hash
+        if (hashExpandedProductId) {
+            if (searchQuery) {
+                // If there's a search, expand in search results
+                expandedProductIdSearch = hashExpandedProductId;
+                expandedProductIdAll = null;
+            } else {
+                // Expand in all products
+                expandedProductIdAll = hashExpandedProductId;
+                expandedProductIdSearch = null;
+            }
+        } else {
+            // No product expanded
+            expandedProductIdSearch = null;
+            expandedProductIdAll = null;
         }
     }
 
     onMount(() => {
         // Handle initial hash if present
-        if (window.location.hash) {
-            handleHashChange();
-        }
+        handleHashChange();
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
     });
@@ -90,14 +108,14 @@
         if (!searchQuery.trim()) {
             searchResults = [];
             searchAttempted = false;
-            window.location.hash = '';
+            // Remove 'search' and 'product' from the hash
+            updateHash({ removeSearch: true, removeProduct: true });
             return;
         }
 
         isLoadingSearch = true;
         errorMessage = ''; // Clear any previous error
-        window.removeEventListener('hashchange', handleHashChange);
-        
+
         try {
             // Check if this is a filter query
             if (searchQuery.startsWith('filter:')) {
@@ -141,10 +159,10 @@
             searchTotalPages = 0;
         }
         
+        // Update the hash with the search query
         if (event.type !== 'hashchange') {
-            window.location.hash = encodeURIComponent(searchQuery);
+            updateHash({ searchQuery });
         }
-        window.addEventListener('hashchange', handleHashChange);
         isLoadingSearch = false;
         searchAttempted = true;
     }
@@ -156,11 +174,41 @@
     }
   
     function handleToggleExpand(product, gridType) {
+        const productId = product.id;
         if (gridType === 'search') {
-            expandedProductIdSearch = expandedProductIdSearch === product.id ? null : product.id;
+            expandedProductIdSearch = expandedProductIdSearch === productId ? null : productId;
+            expandedProductIdAll = null; // Ensure only one is expanded
         } else {
-            expandedProductIdAll = expandedProductIdAll === product.id ? null : product.id;
+            expandedProductIdAll = expandedProductIdAll === productId ? null : productId;
+            expandedProductIdSearch = null;
         }
+
+        // Update the hash with the expanded product ID
+        if (expandedProductIdSearch || expandedProductIdAll) {
+            updateHash({ expandedProductId: productId });
+        } else {
+            updateHash({ removeProduct: true });
+        }
+    }
+
+    function updateHash({ searchQuery: newSearchQuery = null, expandedProductId: newExpandedProductId = null, removeSearch = false, removeProduct = false }) {
+        const params = new URLSearchParams(window.location.hash.slice(1)); // Remove '#'
+
+        if (removeSearch) {
+            params.delete('search');
+        } else if (newSearchQuery !== null) {
+            params.set('search', newSearchQuery);
+        }
+
+        if (removeProduct) {
+            params.delete('product');
+        } else if (newExpandedProductId !== null) {
+            params.set('product', newExpandedProductId);
+        }
+
+        // Update the hash without adding a new entry to the browser history
+        const newHash = params.toString();
+        history.replaceState(null, '', newHash ? '#' + newHash : window.location.pathname);
     }
 
     async function handlePageSizeChange(event) {
@@ -192,7 +240,7 @@
         title="Search Results"
         bind:expandedProductId={expandedProductIdSearch}
         on:pageChange={handleSearchPageChange}
-        on:toggleExpand={(event) => handleToggleExpand(event.detail, 'search')}
+        on:toggleExpand={(event) => handleToggleExpand(event.detail.product, 'search')}
         showPageSizeSelector={false}
     />
     {:else if searching}
@@ -228,7 +276,7 @@
         title="All Products"
         bind:expandedProductId={expandedProductIdAll}
         on:pageChange={handlePageChange}
-        on:toggleExpand={(event) => handleToggleExpand(event.detail, 'all')}
+        on:toggleExpand={(event) => handleToggleExpand(event.detail.product, 'all')}
         on:pageSizeChange={(e) => handlePageSizeChange(e)}
         pageSizeOptions={[100, 200, 300, 400]}
     />

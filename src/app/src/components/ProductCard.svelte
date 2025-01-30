@@ -14,7 +14,6 @@
 
     const productId = getProductUniqueId(product);
 
-
     /**
      * The product now stores current_price (finalPrice) and original_price
      * at the top level, plus availability in product.offers?.availability.
@@ -146,13 +145,13 @@
 
     function handleBackgroundClick(event) {
       if (event.target === event.currentTarget) {
-        onToggleExpand(product);
+        onToggleExpand();
       }
     }
 
     function handleEscape(event) {
       if (event.key === 'Escape') {
-        onToggleExpand(product);
+        onToggleExpand();
       }
     }
     function getOriginalPrice(product) {
@@ -306,7 +305,7 @@
     <button 
       type="button"
       class="w-full h-full text-left cursor-pointer"
-      on:click={() => onToggleExpand(product)}
+      on:click={onToggleExpand}
       aria-expanded={expanded}
       transition:fade={{ duration: 500 }}
     >
@@ -440,7 +439,7 @@
     <button 
       class="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto w-full border-none"
       on:click={handleBackgroundClick}
-      on:keydown={(e) => e.key === 'Escape' && onToggleExpand(product)}
+      on:keydown={(e) => e.key === 'Escape' && onToggleExpand()}
       aria-label="Product details"
       transition:fade={{ duration: 500 }}
     >
@@ -450,7 +449,7 @@
           <div class="flex justify-end p-4">
             <button
               class="text-gray-500 hover:text-gray-700"
-              on:click={() => onToggleExpand(product)}
+              on:click={() => onToggleExpand()}
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

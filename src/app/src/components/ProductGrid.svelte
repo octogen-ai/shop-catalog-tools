@@ -19,8 +19,6 @@
     const dispatch = createEventDispatcher();
 
     function handleToggleExpand(product) {
-        const productId = getProductUniqueId(product);
-        expandedProductId = expandedProductId === productId ? null : productId;
         dispatch('toggleExpand', { product });
     }
 
@@ -69,8 +67,8 @@
             {#each products as product}
                 <ProductCard
                     {product}
-                    expanded={getProductUniqueId(product) === expandedProductId}
-                    on:toggleExpand={() => handleToggleExpand(product)}
+                    expanded={expandedProductId === getProductUniqueId(product)}
+                    onToggleExpand={() => handleToggleExpand(product)}
                 />
             {/each}
         {/if}
