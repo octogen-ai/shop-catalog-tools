@@ -79,8 +79,8 @@ brew install npm
 Then run the shell script, which will install all dependencies and start the FastAPI server and the Svelte server:
 
 ```
-chmod +x run_api_and_svelte_server.sh
-./run_api_and_svelte_server.sh
+chmod +x run_api_and_svelte_servers.sh
+./run_api_and_svelte_servers.sh
 ```
 
 This should output something like:
