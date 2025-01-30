@@ -11,9 +11,6 @@ from whoosh.index import create_in
 # Add the src directory to the system path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from src.schema import (
-    AggregateOffer,
-    Offer,
-    Offers,
     ProductGroup,
 )
 
@@ -118,61 +115,61 @@ def create_whoosh_index(
                     image_urls = []
 
                     # Handle offers
-                    if product.offers:
-                        if isinstance(product.offers, Offers):
-                            # Handle list of individual offers
-                            if product.offers.offers:
-                                valid_offers = [
-                                    o
-                                    for o in product.offers.offers
-                                    if o.price is not None
-                                ]
-                                offer_count = len(valid_offers)
-                                if valid_offers:
-                                    prices = [
-                                        o.price
-                                        for o in valid_offers
-                                        if o.price is not None
-                                    ]
-                                    if prices:
-                                        high_price = max(prices)
-                                        low_price = min(prices)
-                                        price = low_price  # Use lowest price as default
+                    # if product.offers:
+                    #     if isinstance(product.offers, Offers):
+                    #         # Handle list of individual offers
+                    #         if product.offers.offers:
+                    #             valid_offers = [
+                    #                 o
+                    #                 for o in product.offers.offers
+                    #                 if o.price is not None
+                    #             ]
+                    #             offer_count = len(valid_offers)
+                    #             if valid_offers:
+                    #                 prices = [
+                    #                     o.price
+                    #                     for o in valid_offers
+                    #                     if o.price is not None
+                    #                 ]
+                    #                 if prices:
+                    #                     high_price = max(prices)
+                    #                     low_price = min(prices)
+                    #                     price = low_price  # Use lowest price as default
 
-                                    # Get currency from first valid offer with currency
-                                    for offer in valid_offers:
-                                        if offer.priceCurrency:
-                                            currency = offer.priceCurrency
-                                            break
+                    #                 # Get currency from first valid offer with currency
+                    #                 for offer in valid_offers:
+                    #                     if offer.priceCurrency:
+                    #                         currency = offer.priceCurrency
+                    #                         break
 
-                                    # Collect seller names
-                                    seller_names.extend(
-                                        [
-                                            o.seller.name
-                                            for o in valid_offers
-                                            if o.seller and o.seller.name
-                                        ]
-                                    )
+                    #                 # Collect seller names
+                    #                 seller_names.extend(
+                    #                     [
+                    #                         o.seller.name
+                    #                         for o in valid_offers
+                    #                         if o.seller and o.seller.name
+                    #                     ]
+                    #                 )
 
-                        elif isinstance(product.offers, AggregateOffer):
-                            # Handle aggregate offer
-                            offer_count = product.offers.offerCount
-                            high_price = product.offers.highPrice
-                            low_price = product.offers.lowPrice
-                            price = low_price  # Use lowest price as default
-                            currency = product.offers.priceCurrency
-                            if product.offers.seller and product.offers.seller.name:
-                                seller_names.append(product.offers.seller.name)
+                    #     elif isinstance(product.offers, AggregateOffer):
+                    #         # Handle aggregate offer
+                    #         offer_count = product.offers.offerCount
+                    #         high_price = product.offers.highPrice
+                    #         low_price = product.offers.lowPrice
+                    #         price = low_price  # Use lowest price as default
+                    #         currency = product.offers.priceCurrency
+                    #         if product.offers.seller and product.offers.seller.name:
+                    #             seller_names.append(product.offers.seller.name)
 
-                        elif isinstance(product.offers, Offer):
-                            # Handle single offer
-                            offer_count = 1
-                            price = product.offers.price
-                            high_price = price
-                            low_price = price
-                            currency = product.offers.priceCurrency
-                            if product.offers.seller and product.offers.seller.name:
-                                seller_names.append(product.offers.seller.name)
+                    #     elif isinstance(product.offers, Offer):
+                    #         # Handle single offer
+                    #         offer_count = 1
+                    #         price = product.offers.price
+                    #         high_price = price
+                    #         low_price = price
+                    #         currency = product.offers.priceCurrency
+                    #         if product.offers.seller and product.offers.seller.name:
+                    #             seller_names.append(product.offers.seller.name)
 
                     # Fallback to price_info if no offers price available
                     if price is None and product.price_info:
@@ -256,7 +253,7 @@ def create_whoosh_index(
                     continue
 
             print(
-                f"Indexed {min(offset + batch_size, total_rows)} of {total_rows} products"
+                f"Indexed {min(offset + batch_size, total_rows)} of {total_rows} products into {index_dir}"
             )
 
         writer.commit()

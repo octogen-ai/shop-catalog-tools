@@ -123,7 +123,7 @@ async def search_products(
         HTTPException: If search index is not found
     """
     # Open Whoosh index
-    index_dir = f"/tmp/whoosh/{table_name}"
+    index_dir = f"/tmp/whoosh/catalog={table_name}"
     if not os.path.exists(index_dir):
         raise HTTPException(
             status_code=404, detail=f"Search index not found for {table_name}"

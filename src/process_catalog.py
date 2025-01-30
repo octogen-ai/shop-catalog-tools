@@ -142,6 +142,9 @@ async def main() -> None:
                 args.crawl_sources_dir, f"catalog={args.catalog}"
             )
 
+    if args.index_dir:
+        args.index_dir = os.path.join(args.index_dir, f"catalog={args.catalog}")
+
     await process_catalog(
         catalog=args.catalog,
         download_to=download_to,
