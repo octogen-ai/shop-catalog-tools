@@ -84,13 +84,19 @@ def load_to_duckdb(
     duplicates_skipped = 0
 
     if parquet_files:
-        # Read first file and create table
-        first_df = pd.read_parquet(parquet_files[0])
-        if is_flattened:
-            first_df = create_nested_dataframe(first_df)
+        # Read first file and create table, converting struct columns to JSON
+        conn.execute(f"""
+            CREATE TEMP VIEW first_df AS 
+            SELECT 
+                catalog,
+                to_json(extracted_product) as extracted_product,
+                created_at,
+                updated_at
+            FROM read_parquet('{parquet_files[0]}')
+        """)
 
         # Count total records in first file
-        file_total = len(first_df)
+        file_total = conn.execute("SELECT COUNT(*) FROM first_df").fetchone()[0]
 
         # Drop existing tables if they exist
         conn.execute(f"DROP TABLE IF EXISTS {table_name}")
@@ -100,7 +106,10 @@ def load_to_duckdb(
         conn.execute("DROP TABLE IF EXISTS temp_first")
         conn.execute("""
             CREATE TEMPORARY TABLE temp_first AS 
-            SELECT *, 
+            SELECT 
+                catalog,
+                -- Store extracted_product as is (already JSON string)
+                extracted_product,
                 json_extract_string(extracted_product, 'productGroupID') as product_group_id,
                 -- Pre-extract commonly used fields
                 json_extract_string(extracted_product, 'id') as product_id,
@@ -108,15 +117,27 @@ def load_to_duckdb(
                 json_extract_string(extracted_product, 'name') as name,
                 json_extract_string(extracted_product, 'description') as description,
                 json_extract_string(extracted_product, 'image') as product_image,
-                TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-                TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
-                TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
-                TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                -- json_extract_string(extracted_product, 'materials') as materials,
-                -- json_extract_string(extracted_product, '$.audience.genders') as genders,
-                -- json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-                -- json_extract_string(extracted_product, 'hasVariant') as variants_json,
-                -- json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
+                -- Extract price from first variant's first offer's priceSpecification
+                TRY_CAST(
+                    json_extract_string(
+                        extracted_product,
+                        '$.hasVariant[0].offers[0].priceSpecification.price'
+                    )
+                AS FLOAT) as price,
+                -- Extract original price (if available) from first variant's first offer
+                TRY_CAST(
+                    json_extract_string(
+                        extracted_product,
+                        '$.hasVariant[0].offers[0].priceSpecification.originalPrice'
+                    )
+                AS FLOAT) as original_price,
+                -- Extract rating information
+                TRY_CAST(
+                    json_extract_string(extracted_product, '$.review[0].reviewRating.ratingValue')
+                AS FLOAT) as rating,
+                TRY_CAST(
+                    json_extract_string(extracted_product, '$.review[0].reviewRating.ratingCount')
+                AS INTEGER) as rating_count
             FROM first_df
             WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
         """)
@@ -151,81 +172,53 @@ def load_to_duckdb(
             ON {table_name}_extracted (product_group_id)
         """)
 
-        # Create additional attributes table
-        # conn.execute(f"DROP TABLE IF EXISTS {table_name}_additional_attrs")
-        # conn.execute(f"""
-        #     CREATE TABLE {table_name}_additional_attrs AS
-        #     WITH cleaned_json AS (
-        #         SELECT
-        #             CASE
-        #                 WHEN additional_attributes_json IS NULL THEN ''
-        #                 ELSE trim(both '{{}}' from additional_attributes_json)
-        #             END as json_text,
-        #             product_id
-        #         FROM {table_name}_extracted
-        #         WHERE additional_attributes_json IS NOT NULL
-        #             AND additional_attributes_json != 'null'
-        #             AND additional_attributes_json != '{{}}'
-        #     ),
-        #     split_pairs AS (
-        #         SELECT
-        #             trim(both '"' from split_part(value, ':', 1)) as attr_name,
-        #             trim(both '"' from split_part(value, ':', 2)) as attr_value,
-        #             c.product_id
-        #         FROM cleaned_json c,
-        #              (SELECT unnest(string_to_array(json_text, ',')) as value, product_id
-        #               FROM cleaned_json) as pairs(value, product_id)
-        #         WHERE value != ''
-        #     )
-        #     SELECT
-        #         product_id,
-        #         attr_name,
-        #         attr_value
-        #     FROM split_pairs
-        #     WHERE attr_name != ''
-        #         AND NOT attr_name LIKE 'style%'
-        # """)
-
-        # Create indexes for better query performance
-        # conn.execute(f"""
-        #     CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_name
-        #     ON {table_name}_additional_attrs (attr_name)
-        # """)
-        # conn.execute(f"""
-        #     CREATE INDEX IF NOT EXISTS idx_{table_name}_additional_attrs_value
-        #     ON {table_name}_additional_attrs (attr_value)
-        # """)
-
         # Append remaining files
         for parquet_file in parquet_files[1:]:
             logger.info(f"Loading {parquet_file} into tables")
             try:
-                df = pd.read_parquet(parquet_file)
-                if is_flattened:
-                    df = create_nested_dataframe(df)
+                # Create view from parquet file
+                conn.execute(f"""
+                    CREATE VIEW df AS 
+                    SELECT * FROM read_parquet('{parquet_file}')
+                """)
 
-                file_total = len(df)
+                file_total = conn.execute("SELECT COUNT(*) FROM df").fetchone()[0]
 
                 # Create temporary table with extracted fields
                 conn.execute("DROP TABLE IF EXISTS temp_products")
                 conn.execute("""
                     CREATE TEMPORARY TABLE temp_products AS 
-                    SELECT *, 
+                    SELECT 
+                        catalog,
+                        -- Store extracted_product as is (already JSON string)
+                        extracted_product,
                         json_extract_string(extracted_product, 'productGroupID') as product_group_id,
                         json_extract_string(extracted_product, 'id') as product_id,
                         json_extract_string(extracted_product, '$.brand.name') as brand_name,
                         json_extract_string(extracted_product, 'name') as name,
                         json_extract_string(extracted_product, 'description') as description,
                         json_extract_string(extracted_product, 'image') as product_image,
-                        TRY_CAST(json_extract_string(extracted_product, '$.price_info.price') AS FLOAT) as price,
-                        TRY_CAST(json_extract_string(extracted_product, '$.price_info.original_price') AS FLOAT) as original_price,
-                        TRY_CAST(json_extract_string(extracted_product, '$.rating.average_rating') AS FLOAT) as rating,
-                        TRY_CAST(json_extract_string(extracted_product, '$.rating.rating_count') AS INTEGER) as rating_count,
-                        -- json_extract_string(extracted_product, 'materials') as materials,
-                        -- json_extract_string(extracted_product, '$.audience.genders') as genders,
-                        -- json_extract_string(extracted_product, '$.audience.age_groups') as age_groups,
-                        -- json_extract_string(extracted_product, 'hasVariant') as variants_json,
-                        -- json_extract_string(extracted_product, 'additional_attributes') as additional_attributes_json
+                        -- Extract price from first variant's first offer's priceSpecification
+                        TRY_CAST(
+                            json_extract_string(
+                                extracted_product,
+                                '$.hasVariant[0].offers[0].priceSpecification.price'
+                            )
+                        AS FLOAT) as price,
+                        -- Extract original price (if available) from first variant's first offer
+                        TRY_CAST(
+                            json_extract_string(
+                                extracted_product,
+                                '$.hasVariant[0].offers[0].priceSpecification.originalPrice'
+                            )
+                        AS FLOAT) as original_price,
+                        -- Extract rating information
+                        TRY_CAST(
+                            json_extract_string(extracted_product, '$.review[0].reviewRating.ratingValue')
+                        AS FLOAT) as rating,
+                        TRY_CAST(
+                            json_extract_string(extracted_product, '$.review[0].reviewRating.ratingCount')
+                        AS INTEGER) as rating_count
                     FROM df
                     WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
                 """)
@@ -277,8 +270,15 @@ def load_to_duckdb(
                 logger.info(
                     f"Successfully loaded {inserted} rows ({file_total - inserted} duplicates skipped)"
                 )
+
+                # Drop the view after processing
+                conn.execute("DROP VIEW IF EXISTS df")
+
             except Exception as e:
                 logger.error(f"Error loading {parquet_file}: {str(e)}")
+                # Make sure to drop the view even if there's an error
+                conn.execute("DROP VIEW IF EXISTS df")
+                continue
 
         # Clean up temporary tables
         conn.execute("DROP TABLE IF EXISTS temp_first")
