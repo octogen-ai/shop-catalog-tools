@@ -5,7 +5,7 @@ import sys
 
 import duckdb
 from whoosh.analysis import StemmingAnalyzer
-from whoosh.fields import DATETIME, ID, KEYWORD, NUMERIC, STORED, TEXT, Schema
+from whoosh.fields import ID, KEYWORD, NUMERIC, STORED, TEXT, Schema
 from whoosh.index import create_in
 
 # Add the src directory to the system path
@@ -30,9 +30,6 @@ schema = Schema(
     gtin=TEXT(stored=True),
     language_code=TEXT(stored=True),
     tags=KEYWORD(stored=True, commas=True, lowercase=True),
-    available_time=DATETIME(stored=True),
-    availability=TEXT(stored=True),
-    available_quantity=NUMERIC(stored=True),
     sizes=KEYWORD(stored=True, commas=True, lowercase=True),
     materials=KEYWORD(stored=True, commas=True, lowercase=True),
     patterns=KEYWORD(stored=True, commas=True, lowercase=True),
@@ -87,9 +84,12 @@ def create_whoosh_index(
 
         # Process in batches
         for offset in range(0, total_rows, batch_size):
-            rows = cursor.execute(
-                f"SELECT extracted_product FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
-            ).fetchall()
+            # Modified query to use extracted table with pre-extracted price fields
+            rows = cursor.execute(f"""
+                SELECT e.extracted_product, e.price, e.original_price 
+                FROM {table_name}_extracted e 
+                LIMIT {batch_size} OFFSET {offset}
+            """).fetchall()
 
             for row in rows:
                 try:
@@ -98,11 +98,12 @@ def create_whoosh_index(
                     product = ProductGroup(**data)
 
                     # Initialize fields
-                    price = None
+                    price = row[1]  # Use pre-extracted price
+                    original_price = row[2]  # Use pre-extracted original price
                     currency = None
                     offer_count = None
-                    high_price = None
-                    low_price = None
+                    high_price = original_price if original_price else price
+                    low_price = price if price else original_price
                     offer_urls = []
                     seller_names = []
                     color_families = []
@@ -113,68 +114,6 @@ def create_whoosh_index(
                     review_count = None
                     image_url = None
                     image_urls = []
-
-                    # Handle offers
-                    # if product.offers:
-                    #     if isinstance(product.offers, Offers):
-                    #         # Handle list of individual offers
-                    #         if product.offers.offers:
-                    #             valid_offers = [
-                    #                 o
-                    #                 for o in product.offers.offers
-                    #                 if o.price is not None
-                    #             ]
-                    #             offer_count = len(valid_offers)
-                    #             if valid_offers:
-                    #                 prices = [
-                    #                     o.price
-                    #                     for o in valid_offers
-                    #                     if o.price is not None
-                    #                 ]
-                    #                 if prices:
-                    #                     high_price = max(prices)
-                    #                     low_price = min(prices)
-                    #                     price = low_price  # Use lowest price as default
-
-                    #                 # Get currency from first valid offer with currency
-                    #                 for offer in valid_offers:
-                    #                     if offer.priceCurrency:
-                    #                         currency = offer.priceCurrency
-                    #                         break
-
-                    #                 # Collect seller names
-                    #                 seller_names.extend(
-                    #                     [
-                    #                         o.seller.name
-                    #                         for o in valid_offers
-                    #                         if o.seller and o.seller.name
-                    #                     ]
-                    #                 )
-
-                    #     elif isinstance(product.offers, AggregateOffer):
-                    #         # Handle aggregate offer
-                    #         offer_count = product.offers.offerCount
-                    #         high_price = product.offers.highPrice
-                    #         low_price = product.offers.lowPrice
-                    #         price = low_price  # Use lowest price as default
-                    #         currency = product.offers.priceCurrency
-                    #         if product.offers.seller and product.offers.seller.name:
-                    #             seller_names.append(product.offers.seller.name)
-
-                    #     elif isinstance(product.offers, Offer):
-                    #         # Handle single offer
-                    #         offer_count = 1
-                    #         price = product.offers.price
-                    #         high_price = price
-                    #         low_price = price
-                    #         currency = product.offers.priceCurrency
-                    #         if product.offers.seller and product.offers.seller.name:
-                    #             seller_names.append(product.offers.seller.name)
-
-                    # Fallback to price_info if no offers price available
-                    if price is None and product.price_info:
-                        price = product.price_info.price
-                        currency = product.price_info.currency_code
 
                     # Handle color_info
                     if product.color_info:
@@ -216,9 +155,6 @@ def create_whoosh_index(
                         "gtin": product.gtin,
                         "language_code": product.language_code,
                         "tags": ",".join(product.tags or []),
-                        "available_time": product.available_time,
-                        "availability": product.availability,
-                        "available_quantity": product.available_quantity,
                         "sizes": ",".join(product.sizes or []),
                         "materials": ",".join(product.materials or []),
                         "patterns": ",".join(product.patterns or []),

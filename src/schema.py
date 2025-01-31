@@ -30,6 +30,13 @@ def validate_url(url: str) -> str:
 # Replace the existing HttpUrlString definition
 HttpUrlString = Annotated[str, AfterValidator(validate_url)]
 
+EMBEDDING_DIMENSION = 3072
+
+
+class Category(BaseModel):
+    name: str
+    url: Optional[str] = None
+
 
 class Category(BaseModel):
     name: str
@@ -760,11 +767,6 @@ class Product(BaseModel):
 
     def serialize_for_parquet(self, by_alias: bool) -> Dict[str, Any]:
         return self.model_dump(by_alias=by_alias)
-
-    @classmethod
-    def deserialize_from_parquet(cls, row: Any) -> "Product":
-        """Instantiate a Product object from a row of a parquet file."""
-        return cls(**deserialize_row(row))
 
     def __str__(self) -> str:
         # Filter attributes, excluding any that contain "embedding" in their name
