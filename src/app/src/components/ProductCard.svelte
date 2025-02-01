@@ -129,11 +129,6 @@
         };
       });
 
-      // Add some console logging to help debug
-      console.log('Variant example:', variants[0]);
-      console.log('Color Size Availability:', colorSizeAvailability);
-      console.log('All Colors:', product.color_info?.colors);
-
       return {
         colorSizeAvailability,
         allColors: product.color_info?.colors || []
