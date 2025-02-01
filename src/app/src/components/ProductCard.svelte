@@ -57,20 +57,32 @@
       return 'UNKNOWN';
     }
 
-    // Original helper to get icon/color for our local availability codes
-    function getAvailabilityInfo(availability) {
-      switch (availability) {
-        case 'IN_STOCK':
-          return { icon: '✓', color: 'text-green-500', text: 'In Stock' };
-        case 'OUT_OF_STOCK':
-          return { icon: '×', color: 'text-red-500', text: 'Out of Stock' };
-        case 'PREORDER':
-          return { icon: '⏰', color: 'text-blue-500', text: 'Pre-order' };
-        case 'BACKORDER':
-          return { icon: '⌛', color: 'text-yellow-500', text: 'Backordered' };
-        default:
-          return { icon: '?', color: 'text-gray-500', text: 'Unknown' };
+    // Modify the getAvailabilityInfo function to include counts
+    function getAvailabilityInfo(availability, variantInfo, selectedColor) {
+      const baseInfo = {
+        'IN_STOCK': { icon: '✓', color: 'text-green-500', text: 'In Stock' },
+        'OUT_OF_STOCK': { icon: '×', color: 'text-red-500', text: 'Out of Stock' },
+        'PREORDER': { icon: '⏰', color: 'text-blue-500', text: 'Pre-order' },
+        'BACKORDER': { icon: '⌛', color: 'text-yellow-500', text: 'Backordered' },
+        'UNKNOWN': { icon: '?', color: 'text-gray-500', text: 'Unknown' }
+      }[availability] || { icon: '?', color: 'text-gray-500', text: 'Unknown' };
+
+      // Calculate total in-stock and out-of-stock counts across all colors
+      let totalInStock = 0;
+      let totalOutOfStock = 0;
+
+      if (variantInfo?.colorSizeAvailability) {
+        Object.values(variantInfo.colorSizeAvailability).forEach(colorData => {
+          totalInStock += colorData.inStock.length;
+          totalOutOfStock += colorData.outOfStock.length;
+        });
       }
+
+      return {
+        ...baseInfo,
+        totalInStock,
+        totalOutOfStock
+      };
     }
 
     // Modify the groupVariantsByImage function to track color-size combinations
@@ -289,7 +301,7 @@
     $: productLocalAvailability = product?.offers?.availability
       ? schemaToLocalAvailability(product.offers.availability)
       : 'UNKNOWN';
-    $: availabilityInfo = getAvailabilityInfo(productLocalAvailability);
+    $: availabilityInfo = getAvailabilityInfo(productLocalAvailability, variantInfo, selectedColor);
 
     function formatPrice(amount, currency = 'USD') {
       const currencyCode = currency || 'USD';
@@ -433,8 +445,8 @@
                   {availabilityInfo.icon} {availabilityInfo.text}
                   {#if variantInfo}
                     <span class="text-sm text-gray-600">
-                      ({variantInfo.colorSizeAvailability[selectedColor]?.inStock.length} in stock, 
-                      {variantInfo.colorSizeAvailability[selectedColor]?.outOfStock.length} out of stock)
+                      ({availabilityInfo.totalInStock} in stock, 
+                      {availabilityInfo.totalOutOfStock} out of stock)
                     </span>
                   {/if}
                 </p>
@@ -520,8 +532,8 @@
                       {availabilityInfo.icon} {availabilityInfo.text}
                       {#if variantInfo}
                         <span class="text-sm text-gray-600">
-                          ({variantInfo.colorSizeAvailability[selectedColor]?.inStock.length} in stock, 
-                          {variantInfo.colorSizeAvailability[selectedColor]?.outOfStock.length} out of stock)
+                          ({availabilityInfo.totalInStock} in stock, 
+                          {availabilityInfo.totalOutOfStock} out of stock)
                         </span>
                       {/if}
                     </p>
