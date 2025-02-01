@@ -48,7 +48,7 @@
       {/each}
     </div>
     <span class="text-sm text-gray-600">
-      {rating.average_rating.toFixed(1)} ({rating.rating_count})
+      {rating.average_rating.toFixed(1)}{#if rating.rating_count} ({rating.rating_count}){/if}
     </span>
   </div>
 {/if} 
