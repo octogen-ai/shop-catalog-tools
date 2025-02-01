@@ -73,53 +73,63 @@
       }
     }
 
-    // For variants
+    // Modify the groupVariantsByImage function to track color-size combinations
     function groupVariantsByImage(variants) {
-      const inStockColors = new Set();
-      const inStockSizes = new Set();
-      const allColors = new Set();
-      const allSizes = new Set();
+      const colorSizeAvailability = {};
       
+      // First, initialize all colors from color_info structure
+      if (product.color_info?.colors) {
+        product.color_info.colors.forEach(colorObj => {
+          colorSizeAvailability[colorObj.label] = {
+            inStock: new Set(),
+            outOfStock: new Set(),
+            swatch_url: colorObj.swatch_url
+          };
+        });
+      }
+
+      // Then process variants to determine size availability for each color
       variants.forEach(variant => {
-        let isInStock = true;
-        if (variant.offers?.availability) {
-          const localAvail = schemaToLocalAvailability(variant.offers.availability);
-          isInStock = localAvail === 'IN_STOCK';
-        }
-        if (variant.color_info?.colors) {
-          variant.color_info.colors.forEach(color => {
-            allColors.add(color);
-            if (isInStock) inStockColors.add(color);
-          });
-        }
-        if (variant.sizes) {
-          variant.sizes.forEach(size => {
-            allSizes.add(size);
-            if (isInStock) inStockSizes.add(size);
-          });
+        const isInStock = variant.offers?.availability 
+          ? schemaToLocalAvailability(variant.offers.availability) === 'IN_STOCK'
+          : false;
+        
+        // Each variant has exactly one color and one size
+        const colorLabel = variant.color_info?.colors[0]?.label;  // Get the label from the color object
+        const size = variant.sizes?.[0];
+        
+        if (colorLabel && size && colorSizeAvailability[colorLabel]) {
+          if (isInStock) {
+            colorSizeAvailability[colorLabel].inStock.add(size);
+            colorSizeAvailability[colorLabel].outOfStock.delete(size);
+          } else {
+            colorSizeAvailability[colorLabel].outOfStock.add(size);
+          }
         }
       });
 
-      const outOfStockColors = Array.from(allColors).filter(c => !inStockColors.has(c));
-      const outOfStockSizes = Array.from(allSizes).filter(s => !inStockSizes.has(s));
-      
-      return variants.reduce((acc, variant) => {
-        const imageUrl = variant.image?.url;
-        if (!acc[imageUrl]) {
-          acc[imageUrl] = {
-            ...variant,
-            inStockColors: Array.from(inStockColors),
-            outOfStockColors,
-            inStockSizes: Array.from(inStockSizes),
-            outOfStockSizes,
-          };
-        }
-        return acc;
-      }, {});
-    }
+      // Convert Sets to Arrays and sort
+      Object.keys(colorSizeAvailability).forEach(color => {
+        colorSizeAvailability[color] = {
+          ...colorSizeAvailability[color],
+          inStock: Array.from(colorSizeAvailability[color].inStock).sort(),
+          outOfStock: Array.from(colorSizeAvailability[color].outOfStock).sort()
+        };
+      });
 
-    $: variants = product.hasVariant 
-      ? Object.values(groupVariantsByImage(product.hasVariant))[0]
+      // Add some console logging to help debug
+      console.log('Variant example:', variants[0]);
+      console.log('Color Size Availability:', colorSizeAvailability);
+      console.log('All Colors:', product.color_info?.colors);
+
+      return {
+        colorSizeAvailability,
+        allColors: product.color_info?.colors || []
+      };
+    }
+    // Update the variants reactive declaration
+    $: variantInfo = product.hasVariant 
+      ? groupVariantsByImage(product.hasVariant)
       : null;
 
     function nextImage() {
@@ -421,10 +431,10 @@
               {#if productLocalAvailability !== 'UNKNOWN'}
                 <p class={availabilityInfo.color}>
                   {availabilityInfo.icon} {availabilityInfo.text}
-                  {#if variants}
+                  {#if variantInfo}
                     <span class="text-sm text-gray-600">
-                      ({variants.inStockColors.length + variants.inStockSizes.length} in stock, 
-                      {variants.outOfStockColors.length + variants.outOfStockSizes.length} out of stock)
+                      ({variantInfo.colorSizeAvailability[selectedColor]?.inStock.length} in stock, 
+                      {variantInfo.colorSizeAvailability[selectedColor]?.outOfStock.length} out of stock)
                     </span>
                   {/if}
                 </p>
@@ -508,10 +518,10 @@
                   {#if productLocalAvailability !== 'UNKNOWN'}
                     <p class={`mt-2 ${availabilityInfo.color}`}>
                       {availabilityInfo.icon} {availabilityInfo.text}
-                      {#if variants}
+                      {#if variantInfo}
                         <span class="text-sm text-gray-600">
-                          ({variants.inStockColors.length + variants.inStockSizes.length} in stock, 
-                          {variants.outOfStockColors.length + variants.outOfStockSizes.length} out of stock)
+                          ({variantInfo.colorSizeAvailability[selectedColor]?.inStock.length} in stock, 
+                          {variantInfo.colorSizeAvailability[selectedColor]?.outOfStock.length} out of stock)
                         </span>
                       {/if}
                     </p>
@@ -530,50 +540,16 @@
                   {#if product.hasVariant}
                     <!-- Color and Size Pickers -->
                     <div class="mt-4 flex flex-wrap gap-4">
-                      {#if variants?.inStockColors?.length}
-                        <div class="w-full">
-                          <ColorPicker 
-                            colors={variants.inStockColors}
-                            selectedColor={selectedColor}
-                            onColorSelect={handleColorSelect}
-                            title="In-Stock Colors"
-                          />
-                        </div>
-                      {/if}
-
-                      {#if variants?.outOfStockColors?.length}
-                        <div class="w-full">
-                          <ColorPicker 
-                            colors={variants.outOfStockColors}
-                            selectedColor={selectedColor}
-                            onColorSelect={handleColorSelect}
-                            title="Out of Stock Colors"
-                            disabled={true}
-                          />
-                        </div>
-                      {/if}
-
-                      {#if variants?.inStockSizes?.length}
-                        <div class="w-full">
-                          <SizePicker 
-                            sizes={variants.inStockSizes}
-                            selectedSize={selectedSize}
-                            onSizeSelect={handleSizeSelect}
-                            title="In-Stock Sizes"
-                          />
-                        </div>
-                      {/if}
-
-                      {#if variants?.outOfStockSizes?.length}
-                        <div class="w-full">
-                          <SizePicker 
-                            sizes={variants.outOfStockSizes}
-                            selectedSize={selectedSize}
-                            onSizeSelect={handleSizeSelect}
-                            title="Out of Stock Sizes"
-                            disabled={true}
-                          />
-                        </div>
+                      {#if variantInfo}
+                        <ColorPicker 
+                          colors={variantInfo.allColors}
+                          selectedColor={selectedColor}
+                          onColorSelect={handleColorSelect}
+                          colorSizeAvailability={variantInfo.colorSizeAvailability}
+                          selectedSize={selectedSize}
+                          onSizeSelect={handleSizeSelect}
+                          title="Colors"
+                        />
                       {/if}
                     </div>
 
