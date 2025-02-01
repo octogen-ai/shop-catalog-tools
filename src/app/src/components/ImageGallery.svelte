@@ -1,11 +1,21 @@
 <script>
   import { fade } from 'svelte/transition';
+  import ImageSkeleton from './ImageSkeleton.svelte';
   
   export let images = [];
   export let currentIndex = 0;
   export let productName = '';
   export let compact = false;
   export let showThumbnails = true;
+
+  let imagesLoaded = false;
+
+  $: {
+    if (images) {
+      currentIndex = 0;
+      imagesLoaded = images.length > 0;
+    }
+  }
 
   function nextImage() {
     if (images.length > 0) {
@@ -31,7 +41,9 @@
 
 <div class={compact ? "relative" : "mt-8 lg:col-span-7 lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:mt-0"}>
   <div class={compact ? "" : "grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-3 gap-4"}>
-    {#if images && images.length > 0}
+    {#if !imagesLoaded}
+      <ImageSkeleton {compact} />
+    {:else if images && images.length > 0}
       {#if compact}
         <div class="relative h-64 bg-gray-50">
           <img 

@@ -315,6 +315,25 @@
 
     $: finalPriceFormatted = finalPrice ? formatPrice(finalPrice, priceCurrency) : null;
     $: originalPriceFormatted = originalPrice ? formatPrice(originalPrice, priceCurrency) : null;
+
+    // Add this reactive declaration after the existing image declarations
+    $: colorSpecificImages = selectedColor && product.hasVariant
+      ? [
+          // Get the main product image if it has the selected color
+          ...(product.color_info?.colors?.[0]?.label === selectedColor && product.image?.url ? [product.image.url] : []),
+          // Get images from variants with matching color
+          ...product.hasVariant
+            .filter(variant => variant.color_info?.colors?.[0]?.label === selectedColor)
+            .reduce((acc, variant) => {
+              if (variant.image?.url) acc.push(variant.image.url);
+              if (variant.images?.length > 0) {
+                variant.images.forEach(img => acc.push(img.url));
+              }
+              return acc;
+            }, [])
+        ].filter((url, index, self) => index === self.findIndex(t => t === url))
+        .map(url => ({ url }))
+      : combinedImages;
 </script>
 
 <div class="bg-white">
@@ -537,7 +556,7 @@
 
                 <!-- Image gallery -->
                 <ImageGallery 
-                  images={combinedImages}
+                  images={colorSpecificImages}
                   currentIndex={currentImageIndex}
                   productName={product.name}
                 />
