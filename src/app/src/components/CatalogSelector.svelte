@@ -4,7 +4,7 @@
     
     let catalogs = [];
     let loading = true;
-    $: currentCatalog = window.location.pathname.split('/')[1] || 'anntaylor';
+    $: currentCatalog = window.location.pathname.split('/')[1] || '';
 
     onMount(async () => {
         try {

@@ -3,7 +3,6 @@
     import { navigate } from "svelte-routing";
     import CatalogSelector from "./CatalogSelector.svelte";
     import ProductList from "../routes/ProductList.svelte";
-    import Analytics from "../routes/Analytics.svelte";
     import ProductView from "../routes/[table]/product/[id]/+page.svelte";
     import CrawlsView from "../routes/[table]/product/[id]/crawls/+page.svelte";
 
@@ -19,12 +18,7 @@
 
     function handleCatalogChange(event) {
         const catalog = event.detail;
-        const path = window.location.pathname;
-        if (path.includes('analytics')) {
-            window.location.href = `/${catalog}/analytics`;
-        } else {
-            window.location.href = `/${catalog}`;
-        }
+        window.location.href = `/${catalog}`;
     }
 </script>
 
@@ -36,17 +30,10 @@
                     <div class="flex space-x-4">
                         <Link 
                             to="/{currentCatalog}" 
-                            class="rounded-md px-3 py-2 text-sm font-medium {currentPath == `/${currentCatalog}` ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
+                            class="rounded-md px-3 py-2 text-sm font-medium bg-gray-900 text-white"
                             on:click={(e) => handleNavigate(`/${currentCatalog}`, e)}
                         >
                             Products
-                        </Link>
-                        <Link 
-                            to="/{currentCatalog}/analytics" 
-                            class="rounded-md px-3 py-2 text-sm font-medium { currentPath == `/${currentCatalog}/analytics` ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
-                            on:click={(e) => handleNavigate(`/${currentCatalog}/analytics`, e)}
-                        >
-                            Analytics
                         </Link>
                     </div>
                     <div class="ml-6">
@@ -60,7 +47,6 @@
     <main class="container mx-auto px-4 py-8">
         <Route path="/:table/product/:id/crawls" component={CrawlsView} />
         <Route path="/:table/product/:id" component={ProductView} />
-        <Route path="/:table/analytics" component={Analytics} />
         <Route path="/:table" component={ProductList} />
     </main>
 </Router> 

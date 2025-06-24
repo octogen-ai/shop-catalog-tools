@@ -20,6 +20,7 @@
     },
     "dependencies": {
         "js-yaml": "^4.1.0",
+        "lucide-svelte": "^0.523.0",
         "svelte-json-tree": "^2.2.0",
         "svelte-routing": "^2.13.0"
     }

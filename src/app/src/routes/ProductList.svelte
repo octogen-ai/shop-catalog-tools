@@ -1,54 +1,107 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import ProductGrid from '$components/ProductGrid.svelte';
     import SearchBar from '$components/SearchBar.svelte';
-    import { toTitleCase } from '$lib/utils.js';
+    import InfiniteScroll from '$components/InfiniteScroll.svelte';
+    import ProductCard from '$components/ProductCard.svelte';
+    import ProductCardSkeleton from '$components/ProductCardSkeleton.svelte';
     
     // Get table name from URL path
     $: tableName = window.location.pathname.split('/')[1] || 'anntaylor';
     
     let products = [];
     let searchQuery = '';
-    let searchResults = [];
+    let isSearchActive = false;
     let loading = true;
-    let searching = false;
-    let expandedProductIdSearch = null;
-    let expandedProductIdAll = null;
+    let expandedProductId = null;
     let currentPage = 1;
     let totalPages = 1;
-    let searchCurrentPage = 1;
-    let searchTotalPages = 1;
     let totalProducts = 0;
-    let perListPage = 30;
-    let perSearchPage = 9;
-    let pageSizeOptions = [100, 200, 300, 400];
-    let totalSearchResults = 0;
-    let searchAttempted = false;
-    let isLoadingProducts = false;
-    let isLoadingSearch = false;
+    let pageSize = 30;
     let errorMessage = '';
-
+    let hasMoreItems = true;
+    
+    // Utility functions
+    function toTitleCase(str) {
+        if (!str) return '';
+        return str
+            .split(/[\s_-]+/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+    }
+    
+    function getProductUniqueId(product) {
+        if (!product) return null;
+        // Use the product's id if available, otherwise use a combination of name and other fields
+        return product.id || `${product.name || 'unknown'}-${product.url || ''}`.replace(/[^a-zA-Z0-9-]/g, '-');
+    }
+    
     // Make loadProducts reactive to tableName changes
     $: {
         if (tableName) {
+            resetResults();
             loadProducts(1);
         }
     }
 
-    async function loadProducts(page = 1) {
-        isLoadingProducts = true;
-        const res = await fetch(`/api/${tableName}/products?page=${page}&per_page=${perListPage}`);
-        const data = await res.json();
-        products = data.products;
-        totalPages = data.total_pages;
-        totalProducts = data.total;
-        currentPage = data.page;
-        isLoadingProducts = false;
+    function resetResults() {
+        products = [];
+        currentPage = 1;
+        hasMoreItems = true;
+        expandedProductId = null;
     }
 
-    async function handlePageChange(event) {
-        const newPage = event.detail;
-        await loadProducts(newPage);
+    async function loadProducts(page = 1, isNewQuery = false) {
+        loading = true;
+        
+        try {
+            let url;
+            if (searchQuery && isSearchActive) {
+                // Search query
+                if (searchQuery.startsWith('filter:')) {
+                    const [_, ...rest] = searchQuery.split(':');
+                    const filter_string = rest.join(':');
+                    url = `/api/${tableName}/filter?` + 
+                        new URLSearchParams({
+                            filter_string: filter_string,
+                            page: page.toString(),
+                            per_page: pageSize.toString()
+                        });
+                } else {
+                    // Regular search query
+                    url = `/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${pageSize}`;
+                }
+            } else {
+                // Default product list
+                url = `/api/${tableName}/products?page=${page}&per_page=${pageSize}`;
+            }
+            
+            const res = await fetch(url);
+            
+            if (!res.ok) {
+                throw new Error('Failed to fetch products');
+            }
+            
+            const data = await res.json();
+            
+            // If it's a new query, replace existing products
+            if (isNewQuery) {
+                products = data.products;
+            } else {
+                // Otherwise append to existing products
+                products = [...products, ...data.products];
+            }
+            
+            totalPages = data.total_pages;
+            totalProducts = data.total;
+            currentPage = data.page;
+            hasMoreItems = currentPage < totalPages;
+            
+        } catch (error) {
+            console.error('Error loading products:', error);
+            errorMessage = error.message || 'An error occurred while loading products';
+        } finally {
+            loading = false;
+        }
     }
 
     function parseHash() {
@@ -56,13 +109,13 @@
         const params = new URLSearchParams(hash);
         
         const searchQuery = params.get('search') || null;
-        const expandedProductId = params.get('product') || null;
+        // Don't extract product IDs from the URL hash
         
-        return { searchQuery, expandedProductId };
+        return { searchQuery, expandedProductId: null };
     }
 
     function handleHashChange() {
-        const { searchQuery: hashSearchQuery, expandedProductId: hashExpandedProductId } = parseHash();
+        const { searchQuery: hashSearchQuery } = parseHash();
 
         if (hashSearchQuery !== null) {
             // Update searchQuery and initiate search
@@ -71,127 +124,65 @@
         } else {
             // Clear search if no search query in hash
             searchQuery = '';
-            searchResults = [];
-            searchAttempted = false;
+            isSearchActive = false;
+            resetResults();
+            loadProducts(1, true);
         }
-
-        // Update expanded product IDs based on the hash
-        if (hashExpandedProductId) {
-            if (searchQuery) {
-                // If there's a search, expand in search results
-                expandedProductIdSearch = hashExpandedProductId;
-                expandedProductIdAll = null;
-            } else {
-                // Expand in all products
-                expandedProductIdAll = hashExpandedProductId;
-                expandedProductIdSearch = null;
-            }
-        } else {
-            // No product expanded
-            expandedProductIdSearch = null;
-            expandedProductIdAll = null;
-        }
+        
+        // Don't update expanded product ID based on the hash
     }
 
     onMount(() => {
         // Handle initial hash if present
         handleHashChange();
         window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
+    });
+    
+    onDestroy(() => {
+        window.removeEventListener('hashchange', handleHashChange);
     });
 
-    async function handleSearch(event, page = 1) {
+    async function handleSearch(event) {
         if (event.type === 'keydown' && event.key !== 'Enter') {
             return;
         }
         
-        if (!searchQuery.trim()) {
-            searchResults = [];
-            searchAttempted = false;
-            // Remove 'search' and 'product' from the hash
-            updateHash({ removeSearch: true, removeProduct: true });
+        if (!searchQuery.trim() || event.type === 'clear') {
+            isSearchActive = false;
+            // Remove search from the hash
+            updateHash({ removeSearch: true });
+            resetResults();
+            loadProducts(1, true);
             return;
         }
 
-        isLoadingSearch = true;
-        errorMessage = ''; // Clear any previous error
-
-        try {
-            // Check if this is a filter query
-            if (searchQuery.startsWith('filter:')) {
-                const [_, ...rest] = searchQuery.split(':');
-                const filter_string = rest.join(':');
-                const res = await fetch(
-                    `/api/${tableName}/filter?` + 
-                    new URLSearchParams({
-                        filter_string: filter_string,
-                        page: page.toString(),
-                        per_page: perSearchPage.toString()
-                    })
-                );
-                
-                if (!res.ok) {
-                    const error = await res.json();
-                    throw new Error(error.detail || 'Failed to filter products');
-                }
-
-                const data = await res.json();
-                searchResults = data.products;
-                totalSearchResults = data.total;
-                searchTotalPages = data.total_pages;
-                searchCurrentPage = data.page;
-            } else {
-                // Regular search query
-                const res = await fetch(
-                    `/api/${tableName}/search?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perSearchPage}`
-                );
-                const data = await res.json();
-                searchResults = data.products;
-                totalSearchResults = data.total;
-                searchTotalPages = data.total_pages;
-                searchCurrentPage = data.page;
-            }
-        } catch (error) {
-            console.error('Search error:', error);
-            errorMessage = error.message || 'An error occurred while searching';
-            searchResults = [];
-            totalSearchResults = 0;
-            searchTotalPages = 0;
-        }
-        
-        // Update the hash with the search query
+        // Update the hash with the search query if this isn't triggered by a hash change
         if (event.type !== 'hashchange') {
             updateHash({ searchQuery });
         }
-        isLoadingSearch = false;
-        searchAttempted = true;
+        
+        // Reset and start a new search
+        isSearchActive = true;
+        resetResults();
+        await loadProducts(1, true);
     }
 
-    async function handleSearchPageChange(event) {
-        const newPage = event.detail;
-        await handleSearch({ type: 'click' }, newPage);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+    async function handleLoadMore() {
+        if (!loading && hasMoreItems) {
+            const nextPage = currentPage + 1;
+            await loadProducts(nextPage);
+        }
     }
   
-    function handleToggleExpand(product, gridType) {
-        const productId = product.id;
-        if (gridType === 'search') {
-            expandedProductIdSearch = expandedProductIdSearch === productId ? null : productId;
-            expandedProductIdAll = null; // Ensure only one is expanded
-        } else {
-            expandedProductIdAll = expandedProductIdAll === productId ? null : productId;
-            expandedProductIdSearch = null;
-        }
-
-        // Update the hash with the expanded product ID
-        if (expandedProductIdSearch || expandedProductIdAll) {
-            updateHash({ expandedProductId: productId });
-        } else {
-            updateHash({ removeProduct: true });
-        }
+    function handleToggleExpand(product) {
+        const productId = getProductUniqueId(product);
+        expandedProductId = expandedProductId === productId ? null : productId;
+        
+        // Don't update the URL hash when a product is expanded/collapsed
+        // This prevents product URLs from appearing in the browser address bar
     }
 
-    function updateHash({ searchQuery: newSearchQuery = null, expandedProductId: newExpandedProductId = null, removeSearch = false, removeProduct = false }) {
+    function updateHash({ searchQuery: newSearchQuery = null, removeSearch = false }) {
         const params = new URLSearchParams(window.location.hash.slice(1)); // Remove '#'
 
         if (removeSearch) {
@@ -200,20 +191,12 @@
             params.set('search', newSearchQuery);
         }
 
-        if (removeProduct) {
-            params.delete('product');
-        } else if (newExpandedProductId !== null) {
-            params.set('product', newExpandedProductId);
-        }
+        // Always remove any product parameter from the URL
+        params.delete('product');
 
         // Update the hash without adding a new entry to the browser history
         const newHash = params.toString();
         history.replaceState(null, '', newHash ? '#' + newHash : window.location.pathname);
-    }
-
-    async function handlePageSizeChange(event) {
-        perListPage = event.detail;
-        await loadProducts(1);
     }
 </script>
 
@@ -224,60 +207,61 @@
     
     <SearchBar
         bind:value={searchQuery}
-        isLoading={isLoadingSearch}
+        isLoading={loading && currentPage === 1}
         on:search={handleSearch}
+        on:clear={() => {
+            searchQuery = '';
+            isSearchActive = false;
+            resetResults();
+            loadProducts(1, true);
+            updateHash({ removeSearch: true });
+        }}
     />
 
-    {#if searchQuery && (searchResults.length > 0 || isLoadingSearch)}
-        <!-- Search results section -->
-        <ProductGrid
-        products={searchResults}
-        isLoading={isLoadingSearch}
-        itemsPerPage={perSearchPage}
-        currentPage={searchCurrentPage}
-        totalPages={searchTotalPages}
-        totalItems={totalSearchResults}
-        title="Search Results"
-        bind:expandedProductId={expandedProductIdSearch}
-        on:pageChange={handleSearchPageChange}
-        on:toggleExpand={(event) => handleToggleExpand(event.detail.product, 'search')}
-        showPageSizeSelector={false}
-    />
-    {:else if searching}
-        <p class="text-gray-600 mb-8">Searching...</p>
-    {:else if searchAttempted && searchQuery}
-        <p class="text-gray-600 mb-8">No results found for "{searchQuery}"</p>
-    {/if}
+    <div class="mb-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <h2 class="text-2xl font-semibold">
+                {#if searchQuery && isSearchActive}
+                    Search Results for "{searchQuery}"
+                {:else}
+                    All Products
+                {/if}
+            </h2>
+        </div>
+        <span class="text-gray-600">Total: {totalProducts} products</span>
+    </div>
 
     {#if errorMessage}
-        <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-8">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-red-700">
-                        {errorMessage}
-                    </p>
-                </div>
-            </div>
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+            <p>{errorMessage}</p>
         </div>
     {/if}
 
-    <ProductGrid
-        products={products}
-        isLoading={isLoadingProducts}
-        itemsPerPage={perListPage}
-        currentPage={currentPage}
-        {totalPages}
-        totalItems={totalProducts}
-        title="All Products"
-        bind:expandedProductId={expandedProductIdAll}
-        on:pageChange={handlePageChange}
-        on:toggleExpand={(event) => handleToggleExpand(event.detail.product, 'all')}
-        on:pageSizeChange={(e) => handlePageSizeChange(e)}
-        pageSizeOptions={[100, 200, 300, 400]}
-    />
+    <InfiniteScroll 
+        loading={loading && currentPage > 1} 
+        hasMore={hasMoreItems}
+        on:loadMore={handleLoadMore}
+    >
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {#if loading && products.length === 0}
+                {#each Array(pageSize) as _}
+                    <ProductCardSkeleton />
+                {/each}
+            {:else if products.length === 0 && !loading}
+                <div class="col-span-3 text-center py-10">
+                    <p class="text-gray-500 text-lg">No products found</p>
+                </div>
+            {:else}
+                {#each products as product}
+                    {@const productId = getProductUniqueId(product)}
+                    <ProductCard
+                        {product}
+                        initialExpanded={expandedProductId === productId}
+                        hideDebugLink={true}
+                        on:click={() => handleToggleExpand(product)}
+                    />
+                {/each}
+            {/if}
+        </div>
+    </InfiniteScroll>
 </div> 

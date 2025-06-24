@@ -53,6 +53,8 @@
 }
 
 /* Pre blocks for JSON and YAML views */
+/* Commented out to prevent conflict with ProductOverview JSON modal
 pre {
     @apply bg-gray-800 text-white p-4 rounded overflow-auto;
 }
+*/
