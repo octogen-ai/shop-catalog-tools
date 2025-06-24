@@ -6,12 +6,12 @@ from typing import Optional
 import structlog
 from dotenv import load_dotenv
 
-import load_to_db
+from src import load_to_db
 
 # Import functions from existing scripts
-from download_catalog_files import download_catalog
-from index_catalog import create_whoosh_index
-from utils import configure_logging, get_catalog_db_path, get_latest_snapshot_path
+from src.download_catalog_files import download_catalog
+from src.index_catalog import create_whoosh_index
+from src.utils import configure_logging, get_catalog_db_path, get_latest_snapshot_path
 
 # Configure logging
 configure_logging(debug=False, log_to_console=True)

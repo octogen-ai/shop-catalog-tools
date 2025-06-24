@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
-from utils import get_catalog_db_path
+from src.utils import get_catalog_db_path
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

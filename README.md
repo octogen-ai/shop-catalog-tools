@@ -24,21 +24,30 @@ cd shop-catalog-tools
 You'll need to set up Google Cloud credentials to access your catalog data from Google Cloud Storage.
 
 1. Obtain your service account JSON file from an Octogen Admin
-2. Place the JSON file in a secure location on your system
-3. Set the environment variable to point to your credentials file:
+2. Place the JSON file in a secure location on your system (e.g., in the project directory)
+3. Copy the example environment file and update it with your settings:
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-key.json"
+cp .env.example .env
 ```
 
-### 3. Download Catalog Data
+4. Edit the `.env` file to set your credentials path:
 
-We provide convenient scripts to download catalog data for specific customers:
-
-Your script should look something like...
-```bash
-./process_{your_shop_id}_catalogs.sh
 ```
+# IMPORTANT: Use absolute path, not ~/path
+GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/your/service-account-key.json"
+```
+
+### 3. Configure Catalog Settings
+
+In the same `.env` file, configure your catalog settings:
+
+```
+OCTOGEN_CATALOG_BUCKET_NAME="your-gcs-bucket-name" //use the same one in the example env file
+OCTOGEN_CUSTOMER_NAME="your-shop-id" //shared with you by an Octogen Admin
+```
+
+These environment variables are required for the application to automatically discover and process catalogs.
 
 ## Running the Application
 
@@ -50,14 +59,32 @@ chmod +x run_api_and_svelte_servers.sh
 ```
 
 This script will:
-1. Install all necessary frontend dependencies
-2. Build the Svelte application
-3. Start the Vite development server
-4. Start the FastAPI backend server
+1. Check for required Python dependencies
+2. Automatically discover and process catalogs from Google Cloud Storage. The first time this happens, it may take a minute.
+3. Install all necessary frontend dependencies
+4. Build the Svelte application
+5. Start the Vite development server
+6. Start the FastAPI backend server
 
 Once running, you can access the application at `http://localhost:5173` in your browser.
 
 To stop the application, press `Ctrl+C` in the terminal.
+
+## Automatic Catalog Discovery and Processing
+
+The application now features automatic catalog discovery and processing at startup:
+
+1. When the application starts, it will:
+   - Automatically discover available catalogs in Google Cloud Storage
+   - Process missing catalogs before starting the servers
+   - Display a status message showing progress
+
+2. This ensures that:
+   - All catalogs are available when the UI loads
+   - No manual intervention is required to process catalogs
+   - The application is immediately usable with all available data
+
+This feature eliminates the need to manually run processing scripts for each catalog.
 
 ## Using the Frontend
 
@@ -74,7 +101,7 @@ The search bar supports multiple search modes:
    ```
    Example: "shoes"
    ```
-2. **Clear Search**: Click the "Clear search" button or the X icon to return to all products
+2. **Clear Search**: Click the X icon in the search field to clear your search
 
 ### Product Details
 
@@ -93,18 +120,4 @@ The search bar supports multiple search modes:
 - **Infinite Scrolling**: Products load automatically as you scroll
 - **Product Details Modal**: Click any product for a detailed view
 - **JSON Data Viewer**: Technical users can view raw product data from modals
-
-## API Endpoints
-
-The backend provides the following REST API endpoints:
-
-- `GET /api/catalogs` - List all available catalogs
-- `GET /api/{catalog}/products` - Get products with pagination
-- `GET /api/{catalog}/search?query={query}` - Search products
-- `GET /api/{catalog}/filter?filter_string={filter}` - Filter products
-- `GET /api/{catalog}/product/{id}` - Get single product details
-
-## License
-
-[Your License Here]
-
+- **Automatic Catalog Processing**: The application automatically processes catalogs at startup

@@ -4,12 +4,23 @@ import multiprocessing
 import os
 
 import duckdb
+import structlog
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from whoosh.index import open_dir
 from whoosh.qparser import MultifieldParser
+
+# Fix import paths
+from src.utils import configure_logging
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+configure_logging(debug=False, log_to_console=True)
+logger = structlog.get_logger(__name__)
 
 app = FastAPI()
 
@@ -402,20 +413,21 @@ async def get_table_analytics(table_name: str):
 
 @app.get("/api/catalogs")
 async def get_catalogs():
-    """Get list of available catalogs.
+    """Get a list of available catalogs.
 
     Returns:
-        JSONResponse: List of available catalog names
+        JSONResponse: List of catalog names
     """
-    load_dotenv()
     base_dir = os.path.join(os.path.dirname(__file__), "..")
     extension = "duckdb"
     catalogs = []
+
     for file in os.listdir(base_dir):
         if file.endswith(f"_catalog.{extension}"):
             catalog = file.replace(f"_catalog.{extension}", "")
             catalogs.append(catalog)
-    return JSONResponse({"catalogs": sorted(list(set(catalogs)))})
+
+    return JSONResponse({"catalogs": sorted(catalogs)})
 
 
 @app.get("/api/{table_name}/filter")
