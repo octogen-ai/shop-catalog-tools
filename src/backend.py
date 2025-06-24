@@ -162,8 +162,8 @@ async def search_products(
         # Get both ID fields from search results
         product_ids = []
         for result in results:
-            if "productGroupID" in result:
-                product_ids.append(result["productGroupID"])
+            if "product_group_id" in result:
+                product_ids.append(result["product_group_id"])
             elif "id" in result:
                 product_ids.append(result["id"])
 
