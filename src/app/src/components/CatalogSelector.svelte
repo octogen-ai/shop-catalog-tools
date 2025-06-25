@@ -6,7 +6,9 @@
     let loading = true;
     let statusMessage = '';
     
-    $: currentCatalog = window.location.pathname.split('/')[1] || '';
+    // Create a reactive variable for the current catalog
+    let rawCurrentCatalog = window.location.pathname.split('/')[1] || '';
+    $: currentCatalog = rawCurrentCatalog;
 
     onMount(async () => {
         await fetchCatalogs();
@@ -19,7 +21,17 @@
             catalogs = data.catalogs;
             loading = false;
             
-            if (catalogs.length === 0) {
+            // Ensure the current catalog is properly set after loading
+            if (catalogs.length > 0) {
+                if (rawCurrentCatalog && catalogs.includes(rawCurrentCatalog)) {
+                    // Keep current selection if it exists in the catalog list
+                    currentCatalog = rawCurrentCatalog;
+                } else {
+                    // Default to first catalog if current one is not valid
+                    currentCatalog = catalogs[0];
+                    switchCatalog(currentCatalog);
+                }
+            } else {
                 statusMessage = 'No catalogs available. Please restart the application if you expect catalogs to be available.';
             }
         } catch (error) {

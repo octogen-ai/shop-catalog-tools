@@ -13,6 +13,12 @@
     let availableCatalogs = [];
     let loading = true;
 
+    // Watch for changes to currentCatalog
+    $: if (currentCatalog && currentPath === "/" && !loading) {
+        // If we have a catalog but are on root path, navigate to the catalog
+        navigate(`/${currentCatalog}`);
+    }
+
     onMount(async () => {
         await fetchCatalogs();
     });
@@ -24,9 +30,15 @@
             availableCatalogs = data.catalogs;
             
             // If we have catalogs but none selected, use the first one
-            if (availableCatalogs.length > 0 && !currentCatalog) {
-                currentCatalog = availableCatalogs[0];
-                if (currentPath === "/") {
+            if (availableCatalogs.length > 0) {
+                if (!currentCatalog) {
+                    currentCatalog = availableCatalogs[0];
+                    if (currentPath === "/" || !availableCatalogs.includes(currentPath.split('/')[1])) {
+                        navigate(`/${currentCatalog}`);
+                    }
+                } else if (!availableCatalogs.includes(currentCatalog)) {
+                    // If the current catalog doesn't exist in the available list, switch to the first one
+                    currentCatalog = availableCatalogs[0];
                     navigate(`/${currentCatalog}`);
                 }
             }
