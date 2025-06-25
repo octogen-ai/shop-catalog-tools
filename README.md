@@ -15,7 +15,10 @@ Before you begin, ensure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone git@github.com:octogen-ai/shop-catalog-tools.git
+git clone https://github.com/octogen-ai/shop-catalog-tools.git
+```
+
+```bash
 cd shop-catalog-tools
 ```
 
