@@ -2,13 +2,14 @@
     import { onMount } from 'svelte';
     import RatingDisplay from './RatingDisplay.svelte';
     import { Star, ExternalLink, Code } from 'lucide-svelte';
+    import { getFormattedPrice } from '../utils/price-utils';
     
     export let product;
     export let onAddToCart = null;
     export let brandLogo = null;
-    export let justification = null;
-    export let isStreaming = false;
-    export let hideDebugLink = true;
+    const justification = null;
+    const isStreaming = false;
+    export const hideDebugLink = true;
     
     // State
     let selectedImageIndex = 0;
@@ -111,78 +112,9 @@
         return { text: 'Check availability', inStock: true };
     }
     
-    // Extract price information from offers if available
-    function getPrice() {
-        // Try to use current_price/original_price fields first
-        if (typeof product.current_price === 'number') {
-            const price = {
-                final: new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: product.priceCurrency || 'USD',
-                }).format(product.current_price),
-                original: product.original_price && product.original_price > product.current_price 
-                    ? new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: product.priceCurrency || 'USD',
-                    }).format(product.original_price)
-                    : null
-            };
-            return price;
-        }
-
-        // If current_price is not available, try to extract from offers
-        if (product.offers) {
-            const offers = product.offers;
-            
-            if ('priceSpecification' in offers && offers.priceSpecification) {
-                // Handle PriceSpecification
-                const priceSpec = offers.priceSpecification;
-                if ('price' in priceSpec && typeof priceSpec.price === 'number') {
-                    return {
-                        final: new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: priceSpec.priceCurrency || 'USD',
-                        }).format(priceSpec.price),
-                        original: null
-                    };
-                }
-            } else if ('lowPrice' in offers && typeof offers.lowPrice === 'number') {
-                // Handle AggregateOffer
-                return {
-                    final: new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: offers.priceCurrency || 'USD',
-                    }).format(offers.lowPrice),
-                    original: offers.highPrice && offers.highPrice > offers.lowPrice
-                        ? new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: offers.priceCurrency || 'USD',
-                        }).format(offers.highPrice)
-                        : null
-                };
-            } else if ('offers' in offers && Array.isArray(offers.offers) && offers.offers.length > 0) {
-                // Handle Offers array
-                const firstOffer = offers.offers[0];
-                if (firstOffer && firstOffer.priceSpecification && 'price' in firstOffer.priceSpecification && 
-                    typeof firstOffer.priceSpecification.price === 'number') {
-                    return {
-                        final: new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: firstOffer.priceSpecification.priceCurrency || 'USD',
-                        }).format(firstOffer.priceSpecification.price),
-                        original: null
-                    };
-                }
-            }
-        }
-
-        // Fallback
-        return { final: "Price unavailable", original: null };
-    }
-    
     const reviews = getFormattedReviews();
     const availability = getAvailabilityInfo();
-    const price = getPrice();
+    const price = getFormattedPrice(product);
     const productImages = getProductImages(product);
     
     const reviewCount = product.rating
@@ -263,9 +195,9 @@
                                     {#if index > 0}
                                         <span class="mx-2 text-gray-400">/</span>
                                     {/if}
-                                    <a href="#" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                                    <span class="text-sm font-medium text-gray-500 hover:text-gray-700">
                                         {item.item.name}
-                                    </a>
+                                    </span>
                                 </div>
                             </li>
                         {/each}
@@ -497,7 +429,8 @@
                                                     preload="metadata"
                                                     poster={video.thumbnailUrl?.[0]}
                                                 >
-                                                    Your browser does not support HTML video.
+                                                    <track kind="captions" src="" label="English" srclang="en" />
+                                                    Your browser does not support the video element.
                                                 </video>
                                             </div>
                                         {:else if video.thumbnailUrl && video.thumbnailUrl.length > 0}

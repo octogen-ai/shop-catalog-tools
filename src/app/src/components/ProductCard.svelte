@@ -1,12 +1,13 @@
 <script>
     import { createEventDispatcher } from 'svelte';
     import RatingDisplay from './RatingDisplay.svelte';
+    import { getFormattedPrice } from '../utils/price-utils';
     
     const dispatch = createEventDispatcher();
 
     export let product;
     export let initialExpanded = false;
-    export let hideDebugLink = true;
+    const hideDebugLink = true;
     
     let expanded = initialExpanded;
     let imgError = false;
@@ -34,7 +35,7 @@
         }
         
         return [];
-          }
+    }
     
     // Get safe image URL with error handling
     function getSafeImageUrl() {
@@ -45,83 +46,14 @@
     function nextImage() {
         if (productImages.length > 0) {
             currentImageIndex = (currentImageIndex + 1) % productImages.length;
-      }
+        }
     }
 
     function previousImage() {
         if (productImages.length > 0) {
             currentImageIndex = (currentImageIndex - 1 + productImages.length) % productImages.length;
-      }
-    }
-
-    // Get formatted price
-    function getFormattedPrice(product) {
-        // Try to use current_price/original_price fields first
-        if (typeof product.current_price === 'number') {
-            const price = {
-                final: new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: product.priceCurrency || 'USD',
-                }).format(product.current_price),
-                original: product.original_price && product.original_price > product.current_price 
-                    ? new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: product.priceCurrency || 'USD',
-                    }).format(product.original_price)
-                    : null
-            };
-            return price;
-      }
-
-        // If current_price is not available, try to extract from offers
-        if (product.offers) {
-            const offers = product.offers;
-            
-            if ('priceSpecification' in offers && offers.priceSpecification) {
-                // Handle PriceSpecification
-                const priceSpec = offers.priceSpecification;
-                if ('price' in priceSpec && typeof priceSpec.price === 'number') {
-                    return {
-                        final: new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: priceSpec.priceCurrency || 'USD',
-                        }).format(priceSpec.price),
-                        original: null
-                    };
-    }
-            } else if ('lowPrice' in offers && typeof offers.lowPrice === 'number') {
-                // Handle AggregateOffer
-                return {
-                    final: new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: offers.priceCurrency || 'USD',
-                    }).format(offers.lowPrice),
-                    original: offers.highPrice && offers.highPrice > offers.lowPrice
-                        ? new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: offers.priceCurrency || 'USD',
-                        }).format(offers.highPrice)
-                        : null
-                };
-            } else if ('offers' in offers && Array.isArray(offers.offers) && offers.offers.length > 0) {
-                // Handle Offers array
-                const firstOffer = offers.offers[0];
-                if (firstOffer && firstOffer.priceSpecification && 'price' in firstOffer.priceSpecification && 
-                    typeof firstOffer.priceSpecification.price === 'number') {
-                    return {
-                        final: new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: firstOffer.priceSpecification.priceCurrency || 'USD',
-                        }).format(firstOffer.priceSpecification.price),
-                        original: null
-                    };
-                }
-            }
         }
-
-        // Fallback
-        return { final: "Price unavailable", original: null };
-              }
+    }
     
     // Get rating for display
     function getRatingForDisplay(product) {
@@ -131,9 +63,9 @@
             return product.rating;
         } else if (typeof product.rating === 'number') {
             return { average_rating: product.rating };
-      }
+        }
 
-      return null;
+        return null;
     }
     
     $: productImages = getProductImages(product);
@@ -147,7 +79,12 @@
     </div>
 {:else if !expanded}
     <!-- Collapsed view (card) -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col cursor-pointer relative hover:shadow-lg transition-shadow duration-200" on:click={toggleExpand}>
+    <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col cursor-pointer relative hover:shadow-lg transition-shadow duration-200" 
+        on:click={toggleExpand}
+        on:keydown={e => e.key === 'Enter' && toggleExpand()}
+        tabindex="0"
+        role="button"
+        aria-label="Show product details">
         <!-- Product Image -->
         <div class="relative">
             <div class="w-full h-64 relative">
@@ -201,26 +138,29 @@
       </div>
   {:else}
     <!-- Expanded view - using ProductOverview component -->
-    <div class="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto w-full" on:click={() => expanded = false}>
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto w-full" 
+        role="dialog"
+        aria-modal="true"
+        aria-label="Product details">
         <div class="min-h-screen px-4 flex items-center justify-center">
-            <div class="bg-white w-full max-w-7xl rounded-lg shadow-xl" on:click|stopPropagation>
-          <!-- Close button -->
-          <div class="flex justify-end p-4">
-            <button
-              class="text-gray-500 hover:text-gray-700"
+            <section class="bg-white w-full max-w-7xl rounded-lg shadow-xl">
+                <!-- Close button -->
+                <div class="flex justify-end p-4">
+                    <button
+                        class="text-gray-500 hover:text-gray-700"
                         on:click={() => expanded = false}
                         aria-label="Close"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
 
                 {#await import('./ProductOverview.svelte') then { default: ProductOverview }}
-                    <ProductOverview {product} {hideDebugLink} />
+                    <ProductOverview {product} />
                 {/await}
-          </div>
+            </section>
         </div>
-      </div>
+    </div>
   {/if}

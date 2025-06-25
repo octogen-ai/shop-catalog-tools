@@ -89,7 +89,7 @@ def load_to_duckdb(
             CREATE TEMP VIEW first_df AS 
             SELECT 
                 catalog,
-                to_json(extracted_product) as extracted_product,
+                extracted_product, -- Use as-is since it's already a string
                 created_at,
                 updated_at
             FROM read_parquet('{parquet_files[0]}')
@@ -104,13 +104,13 @@ def load_to_duckdb(
 
         # Create temporary table for initial data
         conn.execute("DROP TABLE IF EXISTS temp_first")
-        conn.execute("""
+        conn.execute(f"""
             CREATE TEMPORARY TABLE temp_first AS 
             SELECT 
                 catalog,
                 -- Store extracted_product as is (already JSON string)
                 extracted_product,
-                json_extract_string(extracted_product, 'productGroupID') as product_group_id,
+                product_group_id, -- Use product_group_id directly from parquet
                 -- Pre-extract commonly used fields
                 json_extract_string(extracted_product, 'id') as product_id,
                 json_extract_string(extracted_product, '$.brand.name') as brand_name,
@@ -138,17 +138,26 @@ def load_to_duckdb(
                 TRY_CAST(
                     json_extract_string(extracted_product, '$.review[0].reviewRating.ratingCount')
                 AS INTEGER) as rating_count
-            FROM first_df
-            WHERE json_extract_string(extracted_product, 'productGroupID') IS NOT NULL
+            FROM read_parquet('{parquet_files[0]}')
+            WHERE product_group_id IS NOT NULL
         """)
 
-        # Create main table with deduplicated data and extracted fields
+        # Count records in temp_first
+        temp_count = conn.execute("SELECT COUNT(*) FROM temp_first").fetchone()[0]
+        logger.info(f"Loaded {temp_count} records into temp_first table")
+
+        # Get sample of data
+        sample_count = min(5, temp_count)
+        if sample_count > 0:
+            sample_data = conn.execute(
+                f"SELECT product_group_id FROM temp_first LIMIT {sample_count}"
+            ).fetchall()
+            logger.info(f"Sample product_group_ids: {sample_data}")
+
+        # Create main table with all products from temp_first
         conn.execute(f"""
             CREATE TABLE {table_name}_extracted AS 
-            SELECT DISTINCT ON (product_group_id) *
-            FROM temp_first
-            WHERE product_group_id IS NOT NULL
-            ORDER BY product_group_id, extracted_product
+            SELECT * FROM temp_first
         """)
 
         # Create original table with just the raw JSON for backwards compatibility
@@ -159,16 +168,21 @@ def load_to_duckdb(
         """)
 
         initial_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        duplicates_skipped += file_total - initial_count
-        total_products += initial_count
-
+        unique_count = conn.execute(
+            f"SELECT COUNT(DISTINCT product_group_id) FROM {table_name}"
+        ).fetchone()[0]
         logger.info(
-            f"Created tables {table_name} and {table_name}_extracted with schema from first file ({initial_count} products, {file_total - initial_count} duplicates skipped)"
+            f"Created tables with {initial_count} products ({unique_count} unique product_group_ids)"
         )
 
-        # Add unique index
+        # Only count duplicates if we actually lost some records
+        if file_total > initial_count:
+            duplicates_skipped += file_total - initial_count
+        total_products += initial_count
+
+        # Add index but not as UNIQUE to allow duplicate product_group_ids
         conn.execute(f"""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_product_group_id 
+            CREATE INDEX IF NOT EXISTS idx_product_group_id 
             ON {table_name}_extracted (product_group_id)
         """)
 

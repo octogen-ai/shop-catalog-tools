@@ -257,7 +257,6 @@
                     <ProductCard
                         {product}
                         initialExpanded={expandedProductId === productId}
-                        hideDebugLink={true}
                         on:click={() => handleToggleExpand(product)}
                     />
                 {/each}
