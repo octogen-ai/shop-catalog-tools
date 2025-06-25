@@ -57,7 +57,6 @@ These environment variables are required for the application to automatically di
 The simplest way to run the application is to use our all-in-one script:
 
 ```bash
-chmod +x run_api_and_svelte_servers.sh
 ./run_api_and_svelte_servers.sh
 ```
 
