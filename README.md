@@ -46,7 +46,6 @@ GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/your/service-account-key.json"
 In the same `.env` file, configure your catalog settings:
 
 ```
-OCTOGEN_CATALOG_BUCKET_NAME="your-gcs-bucket-name" //use the same one in the example env file
 OCTOGEN_CUSTOMER_NAME="your-shop-id" //shared with you by an Octogen Admin
 ```
 
