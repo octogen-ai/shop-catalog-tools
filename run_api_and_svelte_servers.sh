@@ -67,8 +67,8 @@ discover_and_process_catalogs
 build_svelte_app
 
 # Run both servers
-run_fastapi_server
 run_vite_server
+run_fastapi_server
 
 
 # Wait for all background processes
