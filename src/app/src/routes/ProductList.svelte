@@ -257,7 +257,7 @@
         hasMore={hasMoreItems}
         on:loadMore={handleLoadMore}
     >
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6">
             {#if loading && products.length === 0}
                 {#each Array(pageSize) as _}
                     <ProductCardSkeleton />

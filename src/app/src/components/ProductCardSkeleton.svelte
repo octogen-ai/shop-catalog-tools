@@ -1,4 +1,4 @@
-<div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col animate-pulse">
+<div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col animate-pulse break-inside-avoid mb-6">
   <div class="w-full h-64 bg-gray-200"></div>
   <div class="p-4 flex-1 flex flex-col">
     <div class="flex justify-between items-start mb-2">

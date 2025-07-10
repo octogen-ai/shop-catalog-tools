@@ -79,61 +79,53 @@
     </div>
 {:else if !expanded}
     <!-- Collapsed view (card) -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col cursor-pointer relative hover:shadow-lg transition-shadow duration-200" 
+    <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col cursor-pointer relative hover:shadow-lg transition-shadow duration-200 break-inside-avoid mb-6" 
         on:click={toggleExpand}
         on:keydown={e => e.key === 'Enter' && toggleExpand()}
         tabindex="0"
         role="button"
         aria-label="Show product details">
         <!-- Product Image -->
-        <div class="relative">
-            <div class="w-full h-64 relative">
+        <div class="relative w-full">
             <img 
-                    src={getSafeImageUrl()}
-                    alt={productName}
-              class="w-full h-64 object-cover"
-                    on:error={() => { imgError = true; }}
-                />
-            </div>
+                src={getSafeImageUrl()}
+                alt={productName}
+                class="w-full h-auto object-contain"  
+                on:error={() => { imgError = true; }}
+            />
         </div>
 
         <!-- Product Info -->
-        <div class="p-4 flex-1 flex flex-col">
-            <!-- Top section with product name -->
-            <div class="mb-2">
-                <h3 class="text-lg font-semibold mb-2">{productName}</h3>
-            </div>
-            
-            <!-- Rating and price section -->
-            <div class="mb-4">
-                <!-- Rating section -->
-                {#if product.rating !== undefined}
-                <div class="mb-2">
-                        <RatingDisplay
-                            rating={getRatingForDisplay(product)}
-                            size="sm"
-                            showCount={true}
-                        />
-                </div>
-              {/if}
+        <div class="p-3 flex-1 flex flex-col text-sm">
+            <!-- Product name -->
+            <h3 class="text-base font-medium text-gray-800 mb-1 line-clamp-2">{productName}</h3>
 
-                <!-- Price section -->
+            <!-- Rating & price -->
+            <div class="mb-3 space-y-1">
+                {#if product.rating !== undefined}
+                    <RatingDisplay
+                        rating={getRatingForDisplay(product)}
+                        size="sm"
+                        showCount={true}
+                    />
+                {/if}
+
                 {#if price.final}
-                <p class="text-gray-600 mb-2">
+                    <p class="text-gray-700">
                         {price.final}
                         {#if price.original}
-                            <span class="text-gray-500 line-through ml-2">
+                            <span class="text-gray-400 line-through ml-1">
                                 {price.original}
-                    </span>
-                  {/if}
-                </p>
-              {/if}
+                            </span>
+                        {/if}
+                    </p>
+                {/if}
             </div>
-            
-            <!-- Subtle text indicator -->
+
+            <!-- Subtle indicator -->
             <div class="mt-auto text-right">
-                <span class="text-xs text-indigo-600">Click for details</span>
-          </div>
+                <span class="text-xs text-gray-400">Click for details</span>
+            </div>
         </div>
       </div>
   {:else}
