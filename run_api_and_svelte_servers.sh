@@ -57,8 +57,8 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Check Python dependencies (handled by uv automatically)
-# check_python_dependencies
+# Check Python dependencies
+check_python_dependencies
 
 # Discover and process catalogs before starting servers
 discover_and_process_catalogs
